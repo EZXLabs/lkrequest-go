@@ -1,0 +1,303 @@
+# lkrequest-go
+
+Go bindings for [`lkrequest`](https://github.com/EZ-XLabs/lkrequest) — a Rust HTTP client with
+byte-level **TLS / HTTP2 / HTTP3(QUIC) fingerprint control**, for browser emulation,
+anti-detection research, and web scraping.
+
+[English](README.md) | [简体中文](README-zh.md)
+
+The package wraps the `lkrequest-ffi` C ABI behind a thin, idiomatic Go API:
+
+- `Client` — immutable, shareable client configuration (fingerprint, TLS, timeouts)
+- `Session` — connection pool, proxy, redirect, retry, and cookie state
+- `Request` — single-owner, consume-on-send request builder
+- `Response` / `StreamingResponse` — buffered and streaming (`io.ReadCloser`) reads
+
+## Features
+
+- **Browser fingerprint presets** — Chrome / Firefox / Safari TLS+HTTP2 fingerprints by name
+- **Fingerprint randomization** — per-connection TLS extension-order jitter (drifts JA3, stays a real browser); synthetic cross-layer identities with the `synthetic-fp` library
+- **HTTP/2 & HTTP/3 (QUIC)** — Alt-Svc discovery, per-request protocol preference, H3 header order
+- **Dual engine** — default `purego` (no C compiler, embedded library) or `lkcgo` (static CGo link)
+- **Streaming responses** — `SendStreaming()` returns an `io.ReadCloser`
+- **Cookie management** — jar, attribute-aware `SetCookieWithAttrs`, per-request override
+- **Multipart upload** — text + file parts
+- **Retry strategies** — fixed interval / exponential backoff (with jitter)
+- **Proxy** — per-session / per-request / proxy pool / session pool, with rotation, health checks, and bad-proxy marking
+- **Connection prewarming** — `Preconnect` / `PreconnectAsync`
+- **Automatic decompression** — gzip / br / deflate / zstd, controllable via `AcceptEncoding`
+- **Certificate management** — custom CA, verify toggle, native certs, ECH, TLS keylog
+- **Header / cookie ordering** — configurable at client / session / request levels
+- **Custom DNS** — built-in DoH resolvers (Google / Cloudflare / Quad9) or a custom resolver callback
+- **SOCKS5 UDP relay probing** — detect UDP ASSOCIATE support for QUIC-over-SOCKS5
+- **Request diagnostics** — per-phase timings (DNS / TCP / TLS / TTFB) via `DiagnosticsJSON()`
+- **Context support** — cancelable (`SendWithContext`) and async (`SendAsync`) sends
+- **Typed errors** — error code, phase, retryable flag, and diagnostics on `LkError`
+
+## Installation
+
+```bash
+go get github.com/EZ-XLabs/lkrequest-go
+```
+
+```go
+import "github.com/EZ-XLabs/lkrequest-go/lkrequest"
+```
+
+## Quick Start
+
+Top-level helpers use a process-wide default client:
+
+```go
+resp, err := lkrequest.Get("https://httpbin.org/get")
+if err != nil {
+	log.Fatal(err)
+}
+defer resp.Close()
+
+fmt.Println(resp.StatusCode())
+fmt.Println(resp.String())
+```
+
+The full `Client → Session → Request → Response` flow (all handles are explicitly closed):
+
+```go
+client, err := lkrequest.NewClient("chrome_150") // or NewDefaultClient()
+if err != nil {
+	log.Fatal(err)
+}
+defer client.Close()
+
+session, err := lkrequest.NewSession(client)
+if err != nil {
+	log.Fatal(err)
+}
+defer session.Close()
+
+req, err := lkrequest.NewRequest(session, "GET", "https://httpbin.org/get")
+if err != nil {
+	log.Fatal(err)
+}
+
+resp, err := req.Send()
+if err != nil {
+	log.Fatal(err)
+}
+defer resp.Close()
+
+fmt.Println(resp.StatusCode(), resp.Header("content-type"))
+```
+
+## Usage
+
+### Building & sending requests
+
+`Request` is **consume-on-send** — chain setters, then send. Reuse via `Clone()`.
+
+```go
+resp, err := req.
+	AddHeader("accept", "application/json").
+	AddQuery("page", "1").
+	SetBearerAuth("my-token").          // or SetBasicAuth(user, pass)
+	SetJSONBody(`{"hello":"world"}`).   // or SetTextBody / SetBodyBytes / SetForm
+	Send()
+```
+
+Cancelable and async sends:
+
+```go
+resp, err := req.SendWithContext(ctx)          // honors context cancellation
+respCh, errCh := req.SendAsync(ctx)            // runs in a goroutine, returns channels
+```
+
+### Custom client
+
+`ClientBuilder` is a chained builder; setter errors surface at `Build()`.
+
+```go
+client, err := lkrequest.NewClientBuilder().
+	SetPreset("chrome_144").
+	SetVerify(true).
+	SetUseNativeCerts(true).
+	AddDefaultHeader("Accept-Language", "en-US").
+	SetTimeoutTotal(30000).             // milliseconds
+	SetMaxConnectionsPerSession(16).
+	SetFallbackH2ToH1(true).
+	Build()
+```
+
+### Session configuration & retry
+
+```go
+session, err := lkrequest.NewSessionBuilder(client).
+	SetProxy("socks5://user:pass@host:1080").
+	SetMaxRedirects(5).
+	SetHTTP2Only().
+	SetDefaultAcceptEncoding(lkrequest.AcceptEncodingGzip | lkrequest.AcceptEncodingBr).
+	SetRetryExponential(3, 50, 500, true). // maxRetries, baseMs, maxMs, jitter
+	Build()
+
+// Fixed interval instead: SetRetryFixed(2, 100)  // maxRetries, intervalMs
+```
+
+### Cookies
+
+```go
+session.SetCookie("https://example.com", "token", "abc123")
+session.SetCookieWithAttrs("https://example.com", "sid", "xyz", lkrequest.CookieAttrs{
+	Path: "/api", Domain: "example.com", Secure: true, HTTPOnly: true,
+})
+val, _ := session.GetCookie("https://example.com", "token")
+
+req.SetCookieOverride("token", "fresh-value") // per-request override of the jar
+```
+
+### Multipart upload
+
+```go
+mp := lkrequest.NewMultipart().
+	AddText("title", "report").
+	AddFile("document", "report.pdf", "application/pdf", pdfBytes)
+req.SetMultipart(mp) // transfers ownership; the request can no longer be cloned
+```
+
+### Streaming responses
+
+```go
+stream, err := req.SendStreaming()
+if err != nil {
+	log.Fatal(err)
+}
+defer stream.Close()
+
+body, err := io.ReadAll(stream) // StreamingResponse implements io.ReadCloser
+```
+
+### Proxy pool & session pool
+
+```go
+// Proxy pool — rotates URLs, marks bad proxies
+pool, err := lkrequest.NewProxyPoolBuilder().
+	AddProxies([]string{"socks5://p1:1080", "http://p2:8080"}).
+	SetRotation(lkrequest.RotationRoundRobin).
+	Build()
+guard, _ := pool.Acquire()
+defer guard.Close()
+proxyURL := guard.URL()
+
+// Session pool — each session bound to a different proxy
+sp, err := lkrequest.NewSessionPoolBuilder(client).
+	AddProxy("http://p1:8080").
+	SetMaxSessions(8).
+	Build()
+g, _ := sp.Acquire()
+defer g.Close()
+poolReq, _ := g.NewRequest("GET", "https://example.com")
+```
+
+### Browser fingerprints & randomization
+
+```go
+presets, _ := lkrequest.ListPresetsJSON()            // enumerate available presets
+detail, _ := lkrequest.GetPresetDetailJSON("chrome_150")
+
+// Tier 1 — per-connection JA3 jitter, always available, still a real browser
+client, _ := lkrequest.NewClientBuilder().
+	SetRandomize(lkrequest.RandomizeExtensionOrder, lkrequest.FingerprintLayersAll).
+	Build()
+```
+
+`RandomizeRecombine` / `RandomizeFull` synthesize non-browser fingerprints (for blocklist targets)
+and require a library built with the `synthetic-fp` feature; otherwise `SetRandomize` returns an error.
+
+### QUIC / HTTP3
+
+```go
+if lkrequest.FeatureSupported("quic-h3") {
+	session, _ := lkrequest.NewSessionBuilder(client).
+		SetHTTP3WithFallback(). // prefer H3, fall back to H2
+		Build()
+}
+```
+
+### Custom DNS
+
+```go
+client, _ := lkrequest.NewClientBuilder().
+	SetDNS(lkrequest.DnsCloudflareHTTPS). // built-in DoH; or SetDNSCustom("1.1.1.1:53")
+	Build()
+```
+
+### Logging
+
+```go
+lkrequest.InitLog("info", "/tmp/lkrequest.log") // level string, log file
+
+lkrequest.InitLogCallback(func(level lkrequest.LogLevel, target, msg string) {
+	log.Printf("[%v] %s: %s", level, target, msg)
+}, lkrequest.LogLevelInfo)
+```
+
+### Error handling
+
+```go
+resp, err := req.Send()
+if err != nil {
+	var lkErr *lkrequest.LkError
+	if errors.As(err, &lkErr) {
+		fmt.Println(lkErr.Code(), lkErr.Phase(), lkErr.IsRetryable())
+	}
+	log.Fatal(err)
+}
+defer resp.Close()
+
+if err := resp.ErrorForStatus(); err != nil {
+	// 4xx / 5xx
+}
+```
+
+## Dual Engine
+
+Two interchangeable binding engines fill the same `ffi_lk_*` function pointers:
+
+| Engine | Build tag | How it loads the library | Needs a C compiler |
+|---|---|---|---|
+| `purego` (default) | `!lkcgo` | extracts the embedded shared library to a temp dir and `dlopen`s it | No |
+| `cgo` | `lkcgo` | `#include "lkrequest.h"` and links `lib/<platform>/` statically | Yes |
+
+```bash
+go build ./lkrequest/...              # purego (default)
+go build -tags lkcgo ./lkrequest/...  # cgo
+```
+
+## Platform Support
+
+| Platform | Status |
+|---|---|
+| linux / amd64 | ✅ shipped (embedded library) |
+| windows / amd64 | ✅ shipped |
+| darwin / arm64 | ⚠️ local development only (not yet published by upstream CI) |
+
+## Requirements
+
+- **Go 1.21+**.
+
+## API Overview
+
+| Group | Symbols |
+|---|---|
+| Top-level helpers | `Get`, `PostJSON`, `NewClient`, `NewDefaultClient`, `NewSession`, `NewRequest`, `NewMultipart` |
+| Builders | `NewClientBuilder`, `NewSessionBuilder`, `NewProxyPoolBuilder`, `NewSessionPoolBuilder` |
+| Core types | `Client`, `Session`, `Request`, `Response`, `StreamingResponse`, `ProxyPool`, `SessionPool`, `Multipart` |
+| Introspection | `ABIVersion`, `LibraryVersion`, `FeatureSupported`, `ListPresetsJSON`, `GetPresetDetailJSON` |
+| Logging | `InitLog`, `InitLogCallback` |
+| Enums | `RandomizeMode`, `FingerprintLayers`, `AcceptEncoding`, `RotationStrategy`, `HttpVersion`, `PreferredHTTPVersion`, `DnsConfig`, `LogLevel` |
+
+Full API docs: `go doc github.com/EZ-XLabs/lkrequest-go/lkrequest`.
+
+## Notes
+
+- `Client` and `Session` are safe to share across goroutines; `Request` is consume-on-send (reuse via `Clone()`).
+- `StreamingResponse` implements `io.ReadCloser`.
+- `ClientBuilder.Build()` does **not** apply an implicit Chrome header-order preset; set a fingerprint or call `AddHeaderOrder` / `AddCookieOrder` when you need a specific order.
+- QUIC/H3, custom DNS resolver, SOCKS5 UDP probe, preferred/negotiated HTTP version, and synthetic `SetRandomize` tiers require a library that exports the corresponding symbols. Against an older embedded library these return an `lk: ... not supported by the loaded lkrequest library` error (builders defer it to `Build()`); the package still loads normally.

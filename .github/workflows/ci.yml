@@ -1,0 +1,65 @@
+# Public CI for the GitHub mirror. Mirrors the GitLab `check` + `test` stages.
+#
+# The FFI libraries (linux / windows) are committed to the public repo, so
+# go:embed builds work out of the box. macOS is not supported yet (no dylib
+# is shipped), so it is intentionally left out of the test matrix.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CGO_ENABLED: "0"
+  GOFLAGS: "-buildvcs=false"
+
+jobs:
+  # gofmt + go vet (mirrors GitLab `check`)
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l $(find lkrequest -name '*.go'))
+          if [ -n "$unformatted" ]; then
+            echo "Files need formatting:"
+            echo "$unformatted"
+            exit 1
+          fi
+      - name: go vet
+        run: go vet -unsafeptr=false ./...
+
+  # go test on linux + windows (mirrors GitLab `test-linux` / `test-windows`)
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+      - name: go test
+        run: go test ./lkrequest -v -count=1
+
+  # race detector (mirrors GitLab `test-linux-race`, allowed to fail)
+  test-race:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      CGO_ENABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+      - name: go test -race
+        run: go test ./lkrequest -v -count=1 -race

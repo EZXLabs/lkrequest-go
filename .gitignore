@@ -1,0 +1,54 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+# 动态库不进本仓 git:CI 从 Package Registry 拉取,并在同步公开仓时 add -f 注入。
+# (include/ 下的 C 头文件仍进 git,cgo 编译需要。)
+
+# Test binary
+*.test
+
+# Output / coverage
+*.out
+*.prof
+coverage.html
+
+# Go workspace
+go.work
+go.work.sum
+
+# IDE
+.idea/
+.vscode/
+.cursor/
+*.swp
+*.swo
+*~
+
+# Local build cache
+.cache/
+.gocache/
+.gomodcache/
+.gopath/
+.cargo/
+
+# Codex
+.codex/
+.codex-prompt.txt
+
+# Internal docs
+docs/PLAN.md
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+CLAUDE.md
+AGENTS.md
+.claude
+tlsleak/
