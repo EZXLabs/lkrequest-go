@@ -2,6 +2,7 @@ package lkrequest
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"runtime"
@@ -300,6 +301,26 @@ func (r *Request) SetJSONBody(jsonStr string) *Request {
 		return clone.SetJSONBody(jsonStr)
 	})
 	return r
+}
+
+// SetJSON marshals v with encoding/json and sets the result as the request
+// body. It is the serializing counterpart to SetJSONBody, which takes an
+// already-encoded document. A marshal failure is recorded like any other
+// setter failure and surfaces at send time.
+func (r *Request) SetJSON(v any) *Request {
+	if !r.checkMutable() {
+		return r
+	}
+
+	encoded, err := json.Marshal(v)
+	if err != nil {
+		r.firstErr = fmt.Errorf("lk: request set json body: %w", err)
+		return r
+	}
+
+	// SetJSONBody records the replay entry, so Clone reproduces the encoded
+	// document rather than re-marshalling v.
+	return r.SetJSONBody(string(encoded))
 }
 
 func (r *Request) SetForm(pairs map[string]string) *Request {

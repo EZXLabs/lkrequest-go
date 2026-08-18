@@ -36,7 +36,7 @@
 ## 安装
 
 ```bash
-go get github.com/EZ-XLabs/lkrequest-go
+go get github.com/EZ-XLabs/lkrequest-go/lkrequest@latest
 ```
 
 ```go
@@ -73,12 +73,7 @@ if err != nil {
 }
 defer session.Close()
 
-req, err := lkrequest.NewRequest(session, "GET", "https://httpbin.org/get")
-if err != nil {
-	log.Fatal(err)
-}
-
-resp, err := req.Send()
+resp, err := session.Get("https://httpbin.org/get").Send()
 if err != nil {
 	log.Fatal(err)
 }
@@ -91,15 +86,29 @@ fmt.Println(resp.StatusCode(), resp.Header("content-type"))
 
 ### 构造与发送请求
 
+`Session` 为每个 HTTP 动词提供了便捷方法,均返回 `*Request` 供继续链式设置。
+构造失败会随请求一起传递,由 `Send()` 统一报告,不需要单独的错误检查。
+
+```go
+resp, err := session.Get("https://httpbin.org/get").Send()
+
+// Get / Post / Put / Delete / Head / Patch / Options,
+// 其余方法用 Request(method, url)。
+resp, err = session.Request("PROPFIND", "https://example.com/dav").Send()
+```
+
+`NewRequest(session, method, url)` 是同样的构造,但错误立即返回。
+`SessionPoolGuard` 拥有同一套便捷方法。
+
 `Request` 是**发送即失效**的 —— 链式设置后发送,需复用请通过 `Clone()`。
 
 ```go
-resp, err := req.
+resp, err := session.Post("https://httpbin.org/post").
 	AddHeader("accept", "application/json").
 	AddQuery("page", "1").
-	SetBearerAuth("my-token").          // 或 SetBasicAuth(user, pass)
-	SetJSONBody(`{"hello":"world"}`).   // 或 SetTextBody / SetBodyBytes / SetForm
-	Send()
+	SetBearerAuth("my-token").                     // 或 SetBasicAuth(user, pass)
+	SetJSON(map[string]string{"hello": "world"}).  // 用 encoding/json 序列化
+	Send()                                         // SetJSONBody 则接收已编码好的文档
 ```
 
 可取消与异步发送:
@@ -147,6 +156,7 @@ session.SetCookieWithAttrs("https://example.com", "sid", "xyz", lkrequest.Cookie
 	Path: "/api", Domain: "example.com", Secure: true, HTTPOnly: true,
 })
 val, _ := session.GetCookie("https://example.com", "token")
+jar, _ := session.GetCookies("https://example.com") // []Cookie;GetCookiesJSON 返回原始 JSON
 
 req.SetCookieOverride("token", "fresh-value") // 请求级覆盖 jar 中的同名 cookie
 ```
@@ -286,8 +296,9 @@ go build -tags lkcgo ./lkrequest/...  # cgo
 | 分组 | 符号 |
 |---|---|
 | 顶层辅助函数 | `Get`、`PostJSON`、`NewClient`、`NewDefaultClient`、`NewSession`、`NewRequest`、`NewMultipart` |
+| HTTP 动词 | `Session.Get` / `Post` / `Put` / `Delete` / `Head` / `Patch` / `Options` / `Request` —— `SessionPoolGuard` 同样具备 |
 | 构造器 | `NewClientBuilder`、`NewSessionBuilder`、`NewProxyPoolBuilder`、`NewSessionPoolBuilder` |
-| 核心类型 | `Client`、`Session`、`Request`、`Response`、`StreamingResponse`、`ProxyPool`、`SessionPool`、`Multipart` |
+| 核心类型 | `Client`、`Session`、`Request`、`Response`、`StreamingResponse`、`ProxyPool`、`SessionPool`、`Multipart`、`Cookie`、`Redirect` |
 | 内省 | `ABIVersion`、`LibraryVersion`、`FeatureSupported`、`ListPresetsJSON`、`GetPresetDetailJSON` |
 | 日志 | `InitLog`、`InitLogCallback` |
 | 枚举 | `RandomizeMode`、`FingerprintLayers`、`AcceptEncoding`、`RotationStrategy`、`HttpVersion`、`PreferredHTTPVersion`、`DnsConfig`、`LogLevel` |

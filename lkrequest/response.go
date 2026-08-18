@@ -273,6 +273,26 @@ func (r *Response) CookieCount() int {
 	return int(ffi_lk_response_cookie_count(r.ptr))
 }
 
+// Cookies returns every Set-Cookie carried by the response, in wire order. It
+// is the aggregate counterpart to CookieAt, mirroring how Headers relates to
+// HeaderAt. Entries the library reports with an empty name are skipped.
+func (r *Response) Cookies() []Cookie {
+	count := r.CookieCount()
+	if count == 0 {
+		return nil
+	}
+
+	cookies := make([]Cookie, 0, count)
+	for i := 0; i < count; i++ {
+		name, value := r.CookieAt(i)
+		if name == "" {
+			continue
+		}
+		cookies = append(cookies, Cookie{Name: name, Value: value})
+	}
+	return cookies
+}
+
 func (r *Response) CookieAt(index int) (name, value string) {
 	defer runtime.KeepAlive(r)
 	if r == nil || r.ptr == 0 || index < 0 {
@@ -348,6 +368,26 @@ func (r *Response) RedirectCount() int {
 		return 0
 	}
 	return int(ffi_lk_response_redirect_count(r.ptr))
+}
+
+// Redirects returns the response redirect chain, oldest hop first. It is the
+// aggregate counterpart to RedirectAt. Hops the library reports with an empty
+// URL are skipped.
+func (r *Response) Redirects() []Redirect {
+	count := r.RedirectCount()
+	if count == 0 {
+		return nil
+	}
+
+	hops := make([]Redirect, 0, count)
+	for i := 0; i < count; i++ {
+		url, status := r.RedirectAt(i)
+		if url == "" {
+			continue
+		}
+		hops = append(hops, Redirect{URL: url, Status: status})
+	}
+	return hops
 }
 
 func (r *Response) RedirectAt(index int) (url string, status int) {

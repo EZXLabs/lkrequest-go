@@ -2,6 +2,7 @@ package lkrequest
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"runtime"
 	"sync"
@@ -237,6 +238,26 @@ func (s *Session) GetCookiesJSON(url string) (string, error) {
 		return "", err
 	}
 	return goCString(unsafe.Pointer(cell[0])), nil
+}
+
+// GetCookies returns the session cookies that would be sent to url, decoded
+// from the payload GetCookiesJSON returns. It is the structured counterpart to
+// GetCookiesJSON, which stays available for callers that want to forward the
+// raw document.
+func (s *Session) GetCookies(url string) ([]Cookie, error) {
+	raw, err := s.GetCookiesJSON(url)
+	if err != nil {
+		return nil, err
+	}
+	if raw == "" {
+		return nil, nil
+	}
+
+	var cookies []Cookie
+	if err := json.Unmarshal([]byte(raw), &cookies); err != nil {
+		return nil, fmt.Errorf("lk: decode session cookies: %w", err)
+	}
+	return cookies, nil
 }
 
 func (s *Session) ClearCookies() error {

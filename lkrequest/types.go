@@ -334,6 +334,24 @@ type CookieAttrs struct {
 	HTTPOnly bool
 }
 
+// Cookie is a name/value pair, either from a response Set-Cookie header or
+// from a session cookie jar.
+//
+// This is deliberately not net/http.Cookie: the FFI layer only exposes the
+// name and the value, so every other attribute field would be permanently
+// zero and read as "not set" rather than "not reported by the library". The
+// JSON tags match the payload of lk_session_get_cookies_json.
+type Cookie struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// Redirect is one hop of a response redirect chain.
+type Redirect struct {
+	URL    string
+	Status int
+}
+
 // PreferredHTTPVersion selects the per-request protocol preference applied by
 // Request.SetPreferredHTTPVersion. It mirrors lk_preferred_http_version_t.
 type PreferredHTTPVersion int32

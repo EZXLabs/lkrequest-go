@@ -37,7 +37,7 @@ The package wraps the `lkrequest-ffi` C ABI behind a thin, idiomatic Go API:
 ## Installation
 
 ```bash
-go get github.com/EZ-XLabs/lkrequest-go
+go get github.com/EZ-XLabs/lkrequest-go/lkrequest@latest
 ```
 
 ```go
@@ -74,12 +74,7 @@ if err != nil {
 }
 defer session.Close()
 
-req, err := lkrequest.NewRequest(session, "GET", "https://httpbin.org/get")
-if err != nil {
-	log.Fatal(err)
-}
-
-resp, err := req.Send()
+resp, err := session.Get("https://httpbin.org/get").Send()
 if err != nil {
 	log.Fatal(err)
 }
@@ -92,15 +87,30 @@ fmt.Println(resp.StatusCode(), resp.Header("content-type"))
 
 ### Building & sending requests
 
+`Session` has one helper per HTTP verb. Each returns a `*Request` to chain
+setters onto, so a construction failure travels with the request and is
+reported by `Send()` rather than needing its own error check.
+
+```go
+resp, err := session.Get("https://httpbin.org/get").Send()
+
+// Get / Post / Put / Delete / Head / Patch / Options,
+// plus Request(method, url) for anything else.
+resp, err = session.Request("PROPFIND", "https://example.com/dav").Send()
+```
+
+`NewRequest(session, method, url)` is the same construction with the error
+returned up front. `SessionPoolGuard` carries the same set of helpers.
+
 `Request` is **consume-on-send** — chain setters, then send. Reuse via `Clone()`.
 
 ```go
-resp, err := req.
+resp, err := session.Post("https://httpbin.org/post").
 	AddHeader("accept", "application/json").
 	AddQuery("page", "1").
-	SetBearerAuth("my-token").          // or SetBasicAuth(user, pass)
-	SetJSONBody(`{"hello":"world"}`).   // or SetTextBody / SetBodyBytes / SetForm
-	Send()
+	SetBearerAuth("my-token").                     // or SetBasicAuth(user, pass)
+	SetJSON(map[string]string{"hello": "world"}).  // marshals with encoding/json
+	Send()                                         // SetJSONBody takes a pre-encoded document
 ```
 
 Cancelable and async sends:
@@ -148,6 +158,7 @@ session.SetCookieWithAttrs("https://example.com", "sid", "xyz", lkrequest.Cookie
 	Path: "/api", Domain: "example.com", Secure: true, HTTPOnly: true,
 })
 val, _ := session.GetCookie("https://example.com", "token")
+jar, _ := session.GetCookies("https://example.com") // []Cookie; GetCookiesJSON returns the raw payload
 
 req.SetCookieOverride("token", "fresh-value") // per-request override of the jar
 ```
@@ -287,8 +298,9 @@ go build -tags lkcgo ./lkrequest/...  # cgo
 | Group | Symbols |
 |---|---|
 | Top-level helpers | `Get`, `PostJSON`, `NewClient`, `NewDefaultClient`, `NewSession`, `NewRequest`, `NewMultipart` |
+| HTTP verbs | `Session.Get` / `Post` / `Put` / `Delete` / `Head` / `Patch` / `Options` / `Request` — same set on `SessionPoolGuard` |
 | Builders | `NewClientBuilder`, `NewSessionBuilder`, `NewProxyPoolBuilder`, `NewSessionPoolBuilder` |
-| Core types | `Client`, `Session`, `Request`, `Response`, `StreamingResponse`, `ProxyPool`, `SessionPool`, `Multipart` |
+| Core types | `Client`, `Session`, `Request`, `Response`, `StreamingResponse`, `ProxyPool`, `SessionPool`, `Multipart`, `Cookie`, `Redirect` |
 | Introspection | `ABIVersion`, `LibraryVersion`, `FeatureSupported`, `ListPresetsJSON`, `GetPresetDetailJSON` |
 | Logging | `InitLog`, `InitLogCallback` |
 | Enums | `RandomizeMode`, `FingerprintLayers`, `AcceptEncoding`, `RotationStrategy`, `HttpVersion`, `PreferredHTTPVersion`, `DnsConfig`, `LogLevel` |
