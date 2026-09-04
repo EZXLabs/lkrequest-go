@@ -6,8 +6,7 @@
 *.dylib
 *.a
 *.lib
-# 动态库不进本仓 git:CI 从 Package Registry 拉取,并在同步公开仓时 add -f 注入。
-# (include/ 下的 C 头文件仍进 git,cgo 编译需要。)
+!/lkrequest/lib/**
 
 # Test binary
 *.test

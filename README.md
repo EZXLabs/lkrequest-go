@@ -21,7 +21,7 @@ The package wraps the `lkrequest-ffi` C ABI behind a thin, idiomatic Go API:
 - **Dual engine** — default `purego` (no C compiler, embedded library) or `lkcgo` (static CGo link)
 - **Streaming responses** — `SendStreaming()` returns an `io.ReadCloser`
 - **Cookie management** — jar, attribute-aware `SetCookieWithAttrs`, per-request override
-- **Multipart upload** — text + file parts
+- **Multipart upload** — text + file parts, with Chrome-accurate `----WebKitFormBoundary` boundaries
 - **Retry strategies** — fixed interval / exponential backoff (with jitter)
 - **Proxy** — per-session / per-request / proxy pool / session pool, with rotation, health checks, and bad-proxy marking
 - **Connection prewarming** — `Preconnect` / `PreconnectAsync`
@@ -287,7 +287,7 @@ go build -tags lkcgo ./lkrequest/...  # cgo
 |---|---|
 | linux / amd64 | ✅ shipped (embedded library) |
 | windows / amd64 | ✅ shipped |
-| darwin / arm64 | ⚠️ local development only (not yet published by upstream CI) |
+| darwin / arm64 | ✅ shipped (since 0.2.1) |
 
 ## Requirements
 

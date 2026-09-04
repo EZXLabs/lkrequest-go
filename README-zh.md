@@ -20,7 +20,7 @@
 - **双引擎** —— 默认 `purego`(无需 C 编译器,内嵌动态库)或 `lkcgo`(CGo 静态链接)
 - **流式响应** —— `SendStreaming()` 返回 `io.ReadCloser`
 - **Cookie 管理** —— cookie jar、带属性的 `SetCookieWithAttrs`、请求级覆盖
-- **Multipart 上传** —— 文本 + 文件字段
+- **Multipart 上传** —— 文本 + 文件字段,边界与 Chrome 一致(`----WebKitFormBoundary`)
 - **重试策略** —— 固定间隔 / 指数退避(可带 jitter)
 - **代理** —— 会话级 / 请求级 / 代理池 / 会话池,支持轮换、健康检查、坏代理标记
 - **连接预热** —— `Preconnect` / `PreconnectAsync`
@@ -285,7 +285,7 @@ go build -tags lkcgo ./lkrequest/...  # cgo
 |---|---|
 | linux / amd64 | ✅ 已提供(内嵌库) |
 | windows / amd64 | ✅ 已提供 |
-| darwin / arm64 | ⚠️ 仅本地开发(上游 CI 暂未发布) |
+| darwin / arm64 | ✅ 已提供(自 0.2.1 起) |
 
 ## 环境要求
 
