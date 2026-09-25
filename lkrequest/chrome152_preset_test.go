@@ -15,13 +15,19 @@ const (
 	quicParamGoogleInitialRtt = 12583
 )
 
-// fingerprintInfo is the subset of ClientFingerprintInfoJSON these tests assert
-// on. Everything else in the payload is left as raw JSON on purpose: the
+// fingerprintInfo is the subset of ClientFingerprintInfoJSON the preset tests
+// assert on. Everything else in the payload is left as raw JSON on purpose: the
 // library owns that schema, and pinning fields we do not check here would turn
 // every unrelated upstream addition into a Go-side failure.
 type fingerprintInfo struct {
 	TLS struct {
-		Name   string `json:"name"`
+		Name            string `json:"name"`
+		CipherSuites    []int  `json:"cipher_suites"`
+		SupportedGroups []int  `json:"supported_groups"`
+		ECH             *struct {
+			Type   string `json:"type"`
+			AeadID int    `json:"aead_id"`
+		} `json:"ech"`
 		Grease struct {
 			SignatureAlgorithms bool `json:"signature_algorithms"`
 		} `json:"grease"`
@@ -35,6 +41,17 @@ type fingerprintInfo struct {
 		} `json:"extensions"`
 	} `json:"tls"`
 	Quic *struct {
+		// The Chromium generation flags are pointers so an absent field is
+		// distinguishable from one reported as false. A library predating them
+		// omits the keys entirely, and decoding into a plain bool would read
+		// that as an explicit false — turning "too old to check" into a
+		// failure.
+		H3 struct {
+			ChromiumGrease *bool `json:"chromium_grease"`
+		} `json:"h3"`
+		Packetization struct {
+			InitialPacketChaos *bool `json:"initial_packet_chaos"`
+		} `json:"packetization"`
 		TransportParams struct {
 			Order []int64             `json:"transport_parameter_order"`
 			Extra [][]json.RawMessage `json:"extra_transport_parameters"`
@@ -42,27 +59,27 @@ type fingerprintInfo struct {
 	} `json:"quic"`
 }
 
-// chrome152Info builds a chrome_152 client and decodes the fingerprint it
-// reports. Presets are resolved by name inside the loaded library, so a library
-// predating chrome_152 fails at Build() — that is a skip, not a failure, the
-// same way chrome151_preset_test.go handles it.
-func chrome152Info(t *testing.T) fingerprintInfo {
+// presetFingerprint builds a client from the named preset and decodes the
+// fingerprint it reports. Presets are resolved by name inside the loaded
+// library, so a library predating the preset fails at Build() — that is a skip,
+// not a failure, the same way chrome151_preset_test.go handles it.
+func presetFingerprint(t *testing.T, preset string) fingerprintInfo {
 	t.Helper()
 
-	client, err := NewClientBuilder().SetPreset("chrome_152").Build()
+	client, err := NewClientBuilder().SetPreset(preset).Build()
 	if err != nil {
-		t.Skipf("chrome_152 preset not available in the loaded lkrequest library: %v", err)
+		t.Skipf("%s preset not available in the loaded lkrequest library: %v", preset, err)
 	}
 	t.Cleanup(client.Close)
 
 	raw, err := client.FingerprintInfoJSON()
 	if err != nil {
-		t.Fatalf("FingerprintInfoJSON with chrome_152 preset error = %v", err)
+		t.Fatalf("FingerprintInfoJSON with %s preset error = %v", preset, err)
 	}
 
 	var info fingerprintInfo
 	if err := json.Unmarshal([]byte(raw), &info); err != nil {
-		t.Fatalf("unmarshal chrome_152 fingerprint info error = %v; payload = %s", err, raw)
+		t.Fatalf("unmarshal %s fingerprint info error = %v; payload = %s", preset, err, raw)
 	}
 	return info
 }
@@ -96,7 +113,7 @@ func TestChrome152PresetAvailable(t *testing.T) {
 // Chrome 151 has this flag off, so it also guards against the preset silently
 // falling back to the 151 profile.
 func TestChrome152SignatureAlgorithmsGrease(t *testing.T) {
-	info := chrome152Info(t)
+	info := presetFingerprint(t, "chrome_152")
 
 	if !info.TLS.Grease.SignatureAlgorithms {
 		t.Fatal("chrome_152 grease.signature_algorithms = false, want true")
@@ -107,7 +124,7 @@ func TestChrome152SignatureAlgorithmsGrease(t *testing.T) {
 // experimental trust-anchor identifiers vector (0xca34), whose order is
 // reshuffled per ClientHello.
 func TestChrome152TrustAnchorIds(t *testing.T) {
-	info := chrome152Info(t)
+	info := presetFingerprint(t, "chrome_152")
 
 	for _, ext := range info.TLS.Extensions {
 		if ext.ExtensionType != extTrustAnchorIds {
@@ -140,7 +157,7 @@ func TestChrome152QUICDropsGoogleInitialRtt(t *testing.T) {
 		t.Skip("quic-h3 is not supported by the loaded lkrequest library")
 	}
 
-	info := chrome152Info(t)
+	info := presetFingerprint(t, "chrome_152")
 	if info.Quic == nil {
 		t.Fatal("chrome_152 reports no QUIC profile")
 	}

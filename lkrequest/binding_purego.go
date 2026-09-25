@@ -255,6 +255,29 @@ func init() {
 	registerOptional(&ffi_lk_socks5_udp_probe_report_elapsed_ms, handle, "lk_socks5_udp_probe_report_elapsed_ms")
 	registerOptional(&ffi_lk_socks5_udp_probe_report_phase, handle, "lk_socks5_udp_probe_report_phase")
 	registerOptional(&ffi_lk_socks5_udp_probe_report_support, handle, "lk_socks5_udp_probe_report_support")
+	// Proxy configuration handles
+	registerOptional(&ffi_lk_proxy_config_parse, handle, "lk_proxy_config_parse")
+	registerOptional(&ffi_lk_proxy_config_set_user_pass, handle, "lk_proxy_config_set_user_pass")
+	registerOptional(&ffi_lk_proxy_config_set_http_auth, handle, "lk_proxy_config_set_http_auth")
+	registerOptional(&ffi_lk_proxy_config_set_auth_header, handle, "lk_proxy_config_set_auth_header")
+	registerOptional(&ffi_lk_proxy_config_url, handle, "lk_proxy_config_url")
+	registerOptional(&ffi_lk_proxy_config_identity, handle, "lk_proxy_config_identity")
+	registerOptional(&ffi_lk_proxy_config_free, handle, "lk_proxy_config_free")
+	registerOptional(&ffi_lk_session_builder_set_proxy_config, handle, "lk_session_builder_set_proxy_config")
+	registerOptional(&ffi_lk_proxy_pool_builder_add_proxy_config, handle, "lk_proxy_pool_builder_add_proxy_config")
+	// MASQUE outer-connection configuration
+	registerOptional(&ffi_lk_masque_config_new, handle, "lk_masque_config_new")
+	registerOptional(&ffi_lk_masque_config_add_ca_cert_der, handle, "lk_masque_config_add_ca_cert_der")
+	registerOptional(&ffi_lk_masque_config_add_ca_certs_pem, handle, "lk_masque_config_add_ca_certs_pem")
+	registerOptional(&ffi_lk_masque_config_set_use_native_certs, handle, "lk_masque_config_set_use_native_certs")
+	registerOptional(&ffi_lk_masque_config_set_server_name, handle, "lk_masque_config_set_server_name")
+	registerOptional(&ffi_lk_masque_config_set_tunnel_idle_timeout, handle, "lk_masque_config_set_tunnel_idle_timeout")
+	registerOptional(&ffi_lk_masque_config_set_max_idle_tunnels, handle, "lk_masque_config_set_max_idle_tunnels")
+	registerOptional(&ffi_lk_masque_config_set_verify, handle, "lk_masque_config_set_verify")
+	registerOptional(&ffi_lk_masque_config_free, handle, "lk_masque_config_free")
+	registerOptional(&ffi_lk_client_builder_set_masque_config, handle, "lk_client_builder_set_masque_config")
+	registerOptional(&ffi_lk_proxy_pool_builder_set_masque_tunnel_probe, handle, "lk_proxy_pool_builder_set_masque_tunnel_probe")
+	registerOptional(&ffi_lk_session_pool_builder_set_masque_tunnel_probe, handle, "lk_session_pool_builder_set_masque_tunnel_probe")
 }
 
 // registerOptional registers an FFI symbol that may be absent from older

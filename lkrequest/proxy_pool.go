@@ -174,6 +174,10 @@ func (p *ProxyPool) AcquireFresh(badGuard *ProxyGuard) (*ProxyGuard, error) {
 	return newProxyGuardFromPtr(outGuard), nil
 }
 
+// MarkBad records a failure against the proxy with the given identity, as
+// reported by ProxyConfig.Identity — not its URL, which matches nothing. The
+// failure is recorded asynchronously, so a cooldown it triggers takes effect
+// shortly after MarkBad returns.
 func (p *ProxyPool) MarkBad(identity string) error {
 	ptr := p.loadPtr()
 	if ptr == 0 {

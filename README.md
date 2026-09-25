@@ -23,11 +23,12 @@ The package wraps the `lkrequest-ffi` C ABI behind a thin, idiomatic Go API:
 - **Cookie management** — jar, attribute-aware `SetCookieWithAttrs`, per-request override
 - **Multipart upload** — text + file parts, with Chrome-accurate `----WebKitFormBoundary` boundaries
 - **Retry strategies** — fixed interval / exponential backoff (with jitter)
-- **Proxy** — per-session / per-request / proxy pool / session pool, with rotation, health checks, and bad-proxy marking
+- **Proxy** — per-session / per-request / proxy pool / session pool, with rotation, health checks, and bad-proxy marking; static header credentials (`Preshared`, `PrivateToken`, `Bearer`, …) via `ProxyConfig`
+- **MASQUE proxies (experimental)** — QUIC tunneled through an RFC 9298 CONNECT-UDP proxy, with a private CA for the proxy hop; needs a `masque`-enabled library
 - **Connection prewarming** — `Preconnect` / `PreconnectAsync`
 - **Automatic decompression** — gzip / br / deflate / zstd, controllable via `AcceptEncoding`
 - **Certificate management** — custom CA, verify toggle, native certs, ECH, TLS keylog
-- **Header / cookie ordering** — configurable at client / session / request levels
+- **Header / cookie ordering** — configurable at client / session / request levels; cookies you do not order explicitly follow Chrome's own order
 - **Custom DNS** — built-in DoH resolvers (Google / Cloudflare / Quad9) or a custom resolver callback
 - **SOCKS5 UDP relay probing** — detect UDP ASSOCIATE support for QUIC-over-SOCKS5
 - **Request diagnostics** — per-phase timings (DNS / TCP / TLS / TTFB) via `DiagnosticsJSON()`
@@ -206,6 +207,55 @@ defer g.Close()
 poolReq, _ := g.NewRequest("GET", "https://example.com")
 ```
 
+### Proxy credentials beyond username/password
+
+A proxy URL only carries a username and password. `ProxyConfig` also takes a
+static HTTP credential and the header it travels in:
+
+```go
+proxy, err := lkrequest.ParseProxyConfig("https://proxy.example:443")
+if err != nil {
+	log.Fatal(err)
+}
+defer proxy.Close() // builders copy the config
+
+proxy.SetHTTPAuth("Preshared", "<psk>"). // sent as "Preshared <psk>"
+	SetAuthHeader(lkrequest.ProxyAuthHeaderAuthorization) // default: Proxy-Authorization
+
+session, err := lkrequest.NewSessionBuilder(client).SetProxyConfig(proxy).Build()
+// or pool it: lkrequest.NewProxyPoolBuilder().AddProxyConfig(proxy)
+```
+
+`proxy.Identity()` is the key `ProxyPool.MarkBad` expects — a proxy URL is not.
+The mark is applied asynchronously, shortly after `MarkBad` returns.
+
+### MASQUE (experimental)
+
+A `masque://` proxy carries the QUIC connection to the origin inside a
+CONNECT-UDP tunnel. `MasqueConfig` configures the hop to the proxy; its trust
+settings are independent of the client's `SetVerify` and CA certificates.
+
+```go
+masque, err := lkrequest.NewMasqueConfig() // errors if the library lacks MASQUE
+if err != nil {
+	log.Fatal(err)
+}
+defer masque.Close()
+masque.AddCACertsPEM(caPEM). // a private CA for the proxy hop
+	SetUseNativeCerts(false)
+
+client, _ := lkrequest.NewClientBuilder().SetMasqueConfig(masque).Build()
+proxy, _ := lkrequest.ParseProxyConfig("masque://proxy.example") // port defaults to 443
+session, _ := lkrequest.NewSessionBuilder(client).SetHTTP3Only().SetProxyConfig(proxy).Build()
+```
+
+- A MASQUE route carries HTTP/3 only. HTTP/1.1 and HTTP/2 requests through it
+  fail instead of connecting directly, even with `SetFallbackProxyToDirect(true)`.
+- Pools skip `masque://` proxies in health checks unless given
+  `SetMasqueTunnelProbe(masque)` together with `SetHealthCheck`.
+- The embedded libraries are built without the `masque` feature, so with them
+  `NewMasqueConfig` returns an error and `masque://` URLs are rejected.
+
 ### Browser fingerprints & randomization
 
 ```go
@@ -297,13 +347,13 @@ go build -tags lkcgo ./lkrequest/...  # cgo
 
 | Group | Symbols |
 |---|---|
-| Top-level helpers | `Get`, `PostJSON`, `NewClient`, `NewDefaultClient`, `NewSession`, `NewRequest`, `NewMultipart` |
+| Top-level helpers | `Get`, `PostJSON`, `NewClient`, `NewDefaultClient`, `NewSession`, `NewRequest`, `NewMultipart`, `ParseProxyConfig`, `NewMasqueConfig` |
 | HTTP verbs | `Session.Get` / `Post` / `Put` / `Delete` / `Head` / `Patch` / `Options` / `Request` — same set on `SessionPoolGuard` |
 | Builders | `NewClientBuilder`, `NewSessionBuilder`, `NewProxyPoolBuilder`, `NewSessionPoolBuilder` |
-| Core types | `Client`, `Session`, `Request`, `Response`, `StreamingResponse`, `ProxyPool`, `SessionPool`, `Multipart`, `Cookie`, `Redirect` |
+| Core types | `Client`, `Session`, `Request`, `Response`, `StreamingResponse`, `ProxyPool`, `SessionPool`, `ProxyConfig`, `MasqueConfig`, `Multipart`, `Cookie`, `Redirect` |
 | Introspection | `ABIVersion`, `LibraryVersion`, `FeatureSupported`, `ListPresetsJSON`, `GetPresetDetailJSON` |
 | Logging | `InitLog`, `InitLogCallback` |
-| Enums | `RandomizeMode`, `FingerprintLayers`, `AcceptEncoding`, `RotationStrategy`, `HttpVersion`, `PreferredHTTPVersion`, `DnsConfig`, `LogLevel` |
+| Enums | `RandomizeMode`, `FingerprintLayers`, `AcceptEncoding`, `RotationStrategy`, `HttpVersion`, `PreferredHTTPVersion`, `DnsConfig`, `LogLevel`, `ProxyAuthHeader` |
 
 Full API docs: `go doc github.com/EZ-XLabs/lkrequest-go/lkrequest`.
 
@@ -312,4 +362,4 @@ Full API docs: `go doc github.com/EZ-XLabs/lkrequest-go/lkrequest`.
 - `Client` and `Session` are safe to share across goroutines; `Request` is consume-on-send (reuse via `Clone()`).
 - `StreamingResponse` implements `io.ReadCloser`.
 - `ClientBuilder.Build()` does **not** apply an implicit Chrome header-order preset; set a fingerprint or call `AddHeaderOrder` / `AddCookieOrder` when you need a specific order.
-- QUIC/H3, custom DNS resolver, SOCKS5 UDP probe, preferred/negotiated HTTP version, and synthetic `SetRandomize` tiers require a library that exports the corresponding symbols. Against an older embedded library these return an `lk: ... not supported by the loaded lkrequest library` error (builders defer it to `Build()`); the package still loads normally.
+- QUIC/H3, custom DNS resolver, SOCKS5 UDP probe, preferred/negotiated HTTP version, `ProxyConfig` / `MasqueConfig`, and synthetic `SetRandomize` tiers require a library that exports the corresponding symbols. Against an older embedded library these return an `lk: ... not supported by the loaded lkrequest library` error (builders defer it to `Build()`); the package still loads normally.

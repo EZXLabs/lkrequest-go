@@ -313,3 +313,33 @@ var (
 	ffi_lk_socks5_udp_probe_report_phase      func(report uintptr) int32
 	ffi_lk_socks5_udp_probe_report_support    func(report uintptr) int32
 )
+
+// Proxy configuration handles: credentials a proxy URL cannot express.
+var (
+	ffi_lk_proxy_config_parse                  func(urlPtr uintptr, urlLen uintptr, outConfig uintptr) int32
+	ffi_lk_proxy_config_set_user_pass          func(config uintptr, usernamePtr uintptr, usernameLen uintptr, passwordPtr uintptr, passwordLen uintptr) int32
+	ffi_lk_proxy_config_set_http_auth          func(config uintptr, schemePtr uintptr, schemeLen uintptr, credentialsPtr uintptr, credentialsLen uintptr) int32
+	ffi_lk_proxy_config_set_auth_header        func(config uintptr, header int32) int32
+	ffi_lk_proxy_config_url                    func(config uintptr, outPtr uintptr, outLen uintptr) int32
+	ffi_lk_proxy_config_identity               func(config uintptr, outPtr uintptr, outLen uintptr) int32
+	ffi_lk_proxy_config_free                   func(config uintptr)
+	ffi_lk_session_builder_set_proxy_config    func(builder uintptr, config uintptr) int32
+	ffi_lk_proxy_pool_builder_add_proxy_config func(builder uintptr, config uintptr) int32
+)
+
+// MASQUE outer-connection configuration. Every symbol exists in every build,
+// but refuses unless the library was built with the `masque` feature.
+var (
+	ffi_lk_masque_config_new                            func(outConfig uintptr) int32
+	ffi_lk_masque_config_add_ca_cert_der                func(config uintptr, derPtr uintptr, derLen uintptr) int32
+	ffi_lk_masque_config_add_ca_certs_pem               func(config uintptr, pemPtr uintptr, pemLen uintptr, outAdded uintptr) int32
+	ffi_lk_masque_config_set_use_native_certs           func(config uintptr, enabled uintptr) int32
+	ffi_lk_masque_config_set_server_name                func(config uintptr, namePtr uintptr, nameLen uintptr) int32
+	ffi_lk_masque_config_set_tunnel_idle_timeout        func(config uintptr, timeoutMs uint64) int32
+	ffi_lk_masque_config_set_max_idle_tunnels           func(config uintptr, max uintptr) int32
+	ffi_lk_masque_config_set_verify                     func(config uintptr, enabled uintptr) int32
+	ffi_lk_masque_config_free                           func(config uintptr)
+	ffi_lk_client_builder_set_masque_config             func(builder uintptr, config uintptr) int32
+	ffi_lk_proxy_pool_builder_set_masque_tunnel_probe   func(builder uintptr, config uintptr) int32
+	ffi_lk_session_pool_builder_set_masque_tunnel_probe func(builder uintptr, config uintptr) int32
+)

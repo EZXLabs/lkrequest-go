@@ -1004,4 +1004,107 @@ func init() {
 	ffi_lk_socks5_udp_probe_report_support = func(report uintptr) int32 {
 		return int32(C.lk_socks5_udp_probe_report_support((*C.lk_socks5_udp_probe_report_t)(unsafe.Pointer(report))))
 	}
+
+	// Proxy configuration handles
+	ffi_lk_proxy_config_parse = func(urlPtr uintptr, urlLen uintptr, outConfig uintptr) int32 {
+		return int32(C.lk_proxy_config_parse((*C.char)(unsafe.Pointer(urlPtr)), C.size_t(urlLen), (**C.lk_proxy_config_t)(unsafe.Pointer(outConfig))))
+	}
+
+	ffi_lk_proxy_config_set_user_pass = func(config uintptr, usernamePtr uintptr, usernameLen uintptr, passwordPtr uintptr, passwordLen uintptr) int32 {
+		return int32(C.lk_proxy_config_set_user_pass(
+			(*C.lk_proxy_config_t)(unsafe.Pointer(config)),
+			(*C.char)(unsafe.Pointer(usernamePtr)),
+			C.size_t(usernameLen),
+			(*C.char)(unsafe.Pointer(passwordPtr)),
+			C.size_t(passwordLen),
+		))
+	}
+
+	ffi_lk_proxy_config_set_http_auth = func(config uintptr, schemePtr uintptr, schemeLen uintptr, credentialsPtr uintptr, credentialsLen uintptr) int32 {
+		return int32(C.lk_proxy_config_set_http_auth(
+			(*C.lk_proxy_config_t)(unsafe.Pointer(config)),
+			(*C.char)(unsafe.Pointer(schemePtr)),
+			C.size_t(schemeLen),
+			(*C.char)(unsafe.Pointer(credentialsPtr)),
+			C.size_t(credentialsLen),
+		))
+	}
+
+	ffi_lk_proxy_config_set_auth_header = func(config uintptr, header int32) int32 {
+		return int32(C.lk_proxy_config_set_auth_header((*C.lk_proxy_config_t)(unsafe.Pointer(config)), C.lk_proxy_auth_header_t(header)))
+	}
+
+	ffi_lk_proxy_config_url = func(config uintptr, outPtr uintptr, outLen uintptr) int32 {
+		return int32(C.lk_proxy_config_url((*C.lk_proxy_config_t)(unsafe.Pointer(config)), (**C.char)(unsafe.Pointer(outPtr)), (*C.size_t)(unsafe.Pointer(outLen))))
+	}
+
+	ffi_lk_proxy_config_identity = func(config uintptr, outPtr uintptr, outLen uintptr) int32 {
+		return int32(C.lk_proxy_config_identity((*C.lk_proxy_config_t)(unsafe.Pointer(config)), (**C.char)(unsafe.Pointer(outPtr)), (*C.size_t)(unsafe.Pointer(outLen))))
+	}
+
+	ffi_lk_proxy_config_free = func(config uintptr) {
+		C.lk_proxy_config_free((*C.lk_proxy_config_t)(unsafe.Pointer(config)))
+	}
+
+	ffi_lk_session_builder_set_proxy_config = func(builder uintptr, config uintptr) int32 {
+		return int32(C.lk_session_builder_set_proxy_config((*C.lk_session_builder_t)(unsafe.Pointer(builder)), (*C.lk_proxy_config_t)(unsafe.Pointer(config))))
+	}
+
+	ffi_lk_proxy_pool_builder_add_proxy_config = func(builder uintptr, config uintptr) int32 {
+		return int32(C.lk_proxy_pool_builder_add_proxy_config((*C.lk_proxy_pool_builder_t)(unsafe.Pointer(builder)), (*C.lk_proxy_config_t)(unsafe.Pointer(config))))
+	}
+
+	// MASQUE outer-connection configuration
+	ffi_lk_masque_config_new = func(outConfig uintptr) int32 {
+		return int32(C.lk_masque_config_new((**C.lk_masque_config_t)(unsafe.Pointer(outConfig))))
+	}
+
+	ffi_lk_masque_config_add_ca_cert_der = func(config uintptr, derPtr uintptr, derLen uintptr) int32 {
+		return int32(C.lk_masque_config_add_ca_cert_der((*C.lk_masque_config_t)(unsafe.Pointer(config)), (*C.uint8_t)(unsafe.Pointer(derPtr)), C.size_t(derLen)))
+	}
+
+	ffi_lk_masque_config_add_ca_certs_pem = func(config uintptr, pemPtr uintptr, pemLen uintptr, outAdded uintptr) int32 {
+		return int32(C.lk_masque_config_add_ca_certs_pem(
+			(*C.lk_masque_config_t)(unsafe.Pointer(config)),
+			(*C.char)(unsafe.Pointer(pemPtr)),
+			C.size_t(pemLen),
+			(*C.size_t)(unsafe.Pointer(outAdded)),
+		))
+	}
+
+	ffi_lk_masque_config_set_use_native_certs = func(config uintptr, enabled uintptr) int32 {
+		return int32(C.lk_masque_config_set_use_native_certs((*C.lk_masque_config_t)(unsafe.Pointer(config)), cBool(enabled)))
+	}
+
+	ffi_lk_masque_config_set_server_name = func(config uintptr, namePtr uintptr, nameLen uintptr) int32 {
+		return int32(C.lk_masque_config_set_server_name((*C.lk_masque_config_t)(unsafe.Pointer(config)), (*C.char)(unsafe.Pointer(namePtr)), C.size_t(nameLen)))
+	}
+
+	ffi_lk_masque_config_set_tunnel_idle_timeout = func(config uintptr, timeoutMs uint64) int32 {
+		return int32(C.lk_masque_config_set_tunnel_idle_timeout((*C.lk_masque_config_t)(unsafe.Pointer(config)), C.uint64_t(timeoutMs)))
+	}
+
+	ffi_lk_masque_config_set_max_idle_tunnels = func(config uintptr, max uintptr) int32 {
+		return int32(C.lk_masque_config_set_max_idle_tunnels((*C.lk_masque_config_t)(unsafe.Pointer(config)), C.size_t(max)))
+	}
+
+	ffi_lk_masque_config_set_verify = func(config uintptr, enabled uintptr) int32 {
+		return int32(C.lk_masque_config_set_verify((*C.lk_masque_config_t)(unsafe.Pointer(config)), cBool(enabled)))
+	}
+
+	ffi_lk_masque_config_free = func(config uintptr) {
+		C.lk_masque_config_free((*C.lk_masque_config_t)(unsafe.Pointer(config)))
+	}
+
+	ffi_lk_client_builder_set_masque_config = func(builder uintptr, config uintptr) int32 {
+		return int32(C.lk_client_builder_set_masque_config((*C.lk_client_builder_t)(unsafe.Pointer(builder)), (*C.lk_masque_config_t)(unsafe.Pointer(config))))
+	}
+
+	ffi_lk_proxy_pool_builder_set_masque_tunnel_probe = func(builder uintptr, config uintptr) int32 {
+		return int32(C.lk_proxy_pool_builder_set_masque_tunnel_probe((*C.lk_proxy_pool_builder_t)(unsafe.Pointer(builder)), (*C.lk_masque_config_t)(unsafe.Pointer(config))))
+	}
+
+	ffi_lk_session_pool_builder_set_masque_tunnel_probe = func(builder uintptr, config uintptr) int32 {
+		return int32(C.lk_session_pool_builder_set_masque_tunnel_probe((*C.lk_session_pool_builder_t)(unsafe.Pointer(builder)), (*C.lk_masque_config_t)(unsafe.Pointer(config))))
+	}
 }

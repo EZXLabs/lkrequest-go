@@ -211,6 +211,31 @@ typedef int32_t lk_op_state_t;
 #endif // __STDC_VERSION__ >= 202311L
 #endif // __cplusplus
 
+/**
+ * Which request header carries HTTP-based proxy credentials.
+ */
+enum lk_proxy_auth_header_t
+#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+  : int32_t
+#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+ {
+  /**
+   * `Proxy-Authorization` (default).
+   */
+  LK_PROXY_AUTH_HEADER_PROXY_AUTHORIZATION = 0,
+  /**
+   * `Authorization` (masque-go / RFC 9484 §11 style deployments).
+   */
+  LK_PROXY_AUTH_HEADER_AUTHORIZATION = 1,
+};
+#ifndef __cplusplus
+#if __STDC_VERSION__ >= 202311L
+typedef enum lk_proxy_auth_header_t lk_proxy_auth_header_t;
+#else
+typedef int32_t lk_proxy_auth_header_t;
+#endif // __STDC_VERSION__ >= 202311L
+#endif // __cplusplus
+
 enum lk_rotation_strategy_t
 #if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
   : int32_t
@@ -381,6 +406,17 @@ typedef struct lk_dns_resolver_t {
 } lk_dns_resolver_t;
 
 /**
+ * MASQUE outer-connection settings (`lk_masque_config_*`).
+ *
+ * The type exists in every build so the generated header does not change
+ * shape with the `masque` feature; without that feature
+ * `lk_masque_config_new` refuses to produce one.
+ */
+typedef struct lk_masque_config_t {
+  uint8_t _private[0];
+} lk_masque_config_t;
+
+/**
  * C-style callback sink for forwarding logs into the host language.
  */
 typedef void (*lk_log_callback_t)(void *context,
@@ -423,6 +459,10 @@ typedef struct lk_chunk_view_t {
   size_t len;
   bool is_final;
 } lk_chunk_view_t;
+
+typedef struct lk_proxy_config_t {
+  uint8_t _private[0];
+} lk_proxy_config_t;
 
 /**
  * C-style proxy provider used by ProxyPool / SessionPool builders.
@@ -558,6 +598,13 @@ lk_status_t lk_client_builder_set_ech_config(lk_client_builder_t *builder,
 
 lk_status_t lk_client_builder_set_fallback_h2_to_h1(lk_client_builder_t *builder, bool enabled);
 
+/**
+ * Enable or disable proxy->direct fallback (default: disabled).
+ *
+ * Does not apply to MASQUE proxies: a MASQUE tunnel exists to hide the
+ * client's source address, so those routes fail instead of connecting
+ * directly even when this is enabled. HTTP CONNECT and SOCKS5 are unaffected.
+ */
 lk_status_t lk_client_builder_set_fallback_proxy_to_direct(lk_client_builder_t *builder,
                                                            bool enabled);
 
@@ -566,6 +613,28 @@ lk_status_t lk_client_builder_set_h2_preset(lk_client_builder_t *builder, const 
 lk_status_t lk_client_builder_set_keylog_file(lk_client_builder_t *builder,
                                               const char *path_ptr,
                                               size_t path_len);
+
+/**
+ * Configure the **outer** hop of `masque://` routes for clients built from
+ * this builder: its trust anchors, certificate name, and tunnel reclamation.
+ *
+ * The counterpart of
+ * [`ClientBuilder::masque`](lkrequest::client::ClientBuilder::masque). None of it
+ * touches the inner connection — the browser profile still drives every byte
+ * the origin sees, which is the whole point of presenting the tunnel to the
+ * inner stack as a plain UDP socket.
+ *
+ * The settings are **copied**, so `config` can be freed straight afterwards
+ * and the same handle can also be given to a pool builder's tunnel probe.
+ * Calling this again replaces the previous settings wholesale.
+ *
+ * Leaving it unset keeps the Rust defaults (OS trust store, no extra roots),
+ * which is what a public-CA proxy wants.
+ *
+ * Returns `LK_ERR` without the `masque` feature; see `lk_masque_config_new`.
+ */
+lk_status_t lk_client_builder_set_masque_config(lk_client_builder_t *builder,
+                                                const struct lk_masque_config_t *config);
 
 lk_status_t lk_client_builder_set_max_connections_per_session(lk_client_builder_t *builder,
                                                               size_t max_connections);
@@ -669,6 +738,151 @@ lk_status_t lk_log_init(const char *level_ptr, const char *file_path_ptr);
 lk_status_t lk_log_init_callback(lk_log_callback_t callback, void *context, int32_t min_level);
 
 /**
+ * Append one trust anchor, in DER form, for the hop to the MASQUE proxy.
+ *
+ * The counterpart of
+ * [`MasqueOuterConfig::extra_roots`](lkrequest::proxy::MasqueOuterConfig::extra_roots)
+ * and of `ClientBuilder::masque_add_ca_cert_der`. Can be called repeatedly;
+ * each call appends.
+ *
+ * This is **not** `lk_client_builder_add_ca_cert_memory` /
+ * `lk_client_builder_add_ca_cert_file`: those trust a CA for the origin the
+ * request is aimed at, this one for the proxy hop. They are separate on purpose, so a CA used by both must be handed to
+ * both.
+ *
+ * The bytes are copied. They are parsed as a trust anchor when the outer
+ * connection is configured, so invalid DER surfaces on the first request (or
+ * probe) through a `masque://` proxy rather than here — use
+ * `lk_masque_config_add_ca_certs_pem` if you want the input validated up
+ * front.
+ */
+lk_status_t lk_masque_config_add_ca_cert_der(struct lk_masque_config_t *config,
+                                             const uint8_t *der_ptr,
+                                             size_t der_len);
+
+/**
+ * Append every certificate in a PEM bundle as a trust anchor for the hop to
+ * the MASQUE proxy, and report how many were added through `out_added`
+ * (optional; pass `NULL` to ignore the count).
+ *
+ * The entry point to reach for: a private CA is normally distributed as PEM.
+ * Delegates to
+ * [`MasqueOuterConfig::add_ca_certs_pem`](lkrequest::proxy::MasqueOuterConfig::add_ca_certs_pem),
+ * so a bundle of several certificates is accepted and non-certificate PEM
+ * sections (a private key in the same file, say) are skipped.
+ *
+ * Returns `LK_ERR` if a PEM section is malformed or if the
+ * input holds no certificate at all — the second case being the one that
+ * matters, because a path typo or a DER file passed here by mistake would
+ * otherwise leave the trust store silently unchanged and the proxy verified
+ * against whatever else happened to be trusted. Nothing is appended when this
+ * fails, so a half-loaded trust store is not a state to reason about.
+ *
+ * Note this takes the PEM *bytes*, not a path.
+ */
+lk_status_t lk_masque_config_add_ca_certs_pem(struct lk_masque_config_t *config,
+                                              const char *pem_ptr,
+                                              size_t pem_len,
+                                              size_t *out_added);
+
+/**
+ * Free MASQUE outer-connection settings. `NULL` is a no-op.
+ *
+ * Consumers copy the settings, so freeing this after handing it to a client or
+ * pool builder is correct — and required.
+ */
+void lk_masque_config_free(struct lk_masque_config_t *config);
+
+/**
+ * Create MASQUE outer-connection settings at their defaults.
+ *
+ * The defaults are the Rust ones: verify the proxy's certificate against the
+ * operating system's trust store, derive the certificate name from the proxy
+ * URL, retire a tunnel idle for 120s, and carry at most 256 tunnels per outer
+ * connection. A public-CA proxy needs none of the setters below.
+ *
+ * Returns `LK_OK` and writes the handle to `out_config`; free it with
+ * `lk_masque_config_free`. Returns `LK_ERR` and leaves `out_config` null if
+ * this library was built without the `masque` feature.
+ */
+lk_status_t lk_masque_config_new(struct lk_masque_config_t **out_config);
+
+/**
+ * Cap the tunnels one outer MASQUE connection carries, shedding the least
+ * recently active first. **Default: 256**; `0` removes the cap.
+ *
+ * The backstop for a zero `tunnel_idle_timeout`, where nothing else bounds
+ * growth: the proxy holds a UDP socket per tunnel, so a session visiting
+ * thousands of origins would otherwise pin thousands of them.
+ */
+lk_status_t lk_masque_config_set_max_idle_tunnels(struct lk_masque_config_t *config, size_t max);
+
+/**
+ * Override the SNI and the certificate name checked on the hop to the MASQUE
+ * proxy.
+ *
+ * By default the name comes from the proxy URL's host. Override it when the
+ * proxy is addressed by something its certificate does not name — most often
+ * an IP address. Passing `NULL` (or a zero length) restores the default.
+ *
+ * This changes the name the certificate must *cover*; it does not weaken the
+ * check.
+ */
+lk_status_t lk_masque_config_set_server_name(struct lk_masque_config_t *config,
+                                             const char *name_ptr,
+                                             size_t name_len);
+
+/**
+ * Retire a MASQUE tunnel that has carried nothing for `timeout_ms`.
+ * **Default: 120000.**
+ *
+ * `0` disables idle reclamation entirely: a tunnel then lives exactly as long
+ * as the inner QUIC connection using it, and the outer connection carrying it
+ * is pinned for as long as any tunnel survives. That is the setting for a
+ * proxy that charges per tunnel setup rather than per live tunnel —
+ * `lk_masque_config_set_max_idle_tunnels` is then the only thing bounding
+ * growth.
+ */
+lk_status_t lk_masque_config_set_tunnel_idle_timeout(struct lk_masque_config_t *config,
+                                                     uint64_t timeout_ms);
+
+/**
+ * Trust the operating system's certificate store on the hop to the MASQUE
+ * proxy. **Default: enabled.**
+ *
+ * Pass `false` for a proxy behind a private CA: the outer connection then
+ * verifies against the anchors added above and nothing else, so an unrelated
+ * public CA cannot vouch for something answering on the proxy's address.
+ *
+ * Disabling it with no anchors added is rejected when the outer connection is
+ * built — there would be nothing left to verify against — rather than
+ * silently accepting anything.
+ */
+lk_status_t lk_masque_config_set_use_native_certs(struct lk_masque_config_t *config, bool enabled);
+
+/**
+ * Verify the MASQUE proxy's TLS certificate. **Default: enabled.**
+ *
+ * Pass `false` to skip certificate verification **on the hop to the proxy**.
+ * **For development/testing only -- insecure!** That hop is then completely
+ * open to a man in the middle: whatever answers on the proxy's address
+ * terminates the outer TLS connection and sees every CONNECT-UDP target the
+ * session asks for, plus the traffic pattern of everything it does. The inner
+ * QUIC connection's own encryption still holds, so contents do not leak; what
+ * leaks is exactly the set of origins the tunnel existed to keep private.
+ *
+ * Reach for `lk_masque_config_add_ca_certs_pem` first — it fixes the usual
+ * cause (a proxy behind a private CA) without giving up authentication. This
+ * is the escape hatch for a certificate that cannot be made to verify at all,
+ * such as one naming a host that does not resolve.
+ *
+ * Distinct from `lk_client_builder_set_verify`, which governs the connection
+ * to the origin. Neither implies the other, so disabling verification while
+ * debugging one hop never silently disarms the other.
+ */
+lk_status_t lk_masque_config_set_verify(struct lk_masque_config_t *config, bool enabled);
+
+/**
  * Write the process-global telemetry snapshot into `out`.
  *
  * Pull-only and near-free. Reports all-zero counters unless the library was
@@ -731,6 +945,74 @@ lk_status_t lk_preset_get_detail_json(const char *name_ptr,
 
 lk_status_t lk_preset_list_json(const char **out_json_ptr);
 
+/**
+ * Free a proxy configuration handle.
+ */
+void lk_proxy_config_free(struct lk_proxy_config_t *config);
+
+/**
+ * Borrow this proxy's identity — the key used for cooldown and blacklisting.
+ *
+ * Opaque; never contains passwords or encoded credentials.
+ */
+lk_status_t lk_proxy_config_identity(const struct lk_proxy_config_t *config,
+                                     const char **out_ptr,
+                                     size_t *out_len);
+
+/**
+ * Parse a proxy URL into a configuration handle.
+ *
+ * Accepts `http`, `https`, `socks5` and `socks5h`, plus `masque` (RFC 9298
+ * CONNECT-UDP; the port defaults to 443) when this library was built with the
+ * `masque` feature. Without it a `masque://` URL fails with
+ * `LK_ERR_INVALID_CONFIG` and an error message naming the feature to rebuild
+ * with, rather than yielding a configuration no request could ever use.
+ * Returns `LK_OK` and writes the handle to `out_config`; free it with
+ * `lk_proxy_config_free`.
+ */
+lk_status_t lk_proxy_config_parse(const char *url_ptr,
+                                  size_t url_len,
+                                  struct lk_proxy_config_t **out_config);
+
+/**
+ * Select which header carries HTTP-based credentials
+ * (`Proxy-Authorization` by default).
+ */
+lk_status_t lk_proxy_config_set_auth_header(struct lk_proxy_config_t *config,
+                                            lk_proxy_auth_header_t header);
+
+/**
+ * Authenticate with a static HTTP auth-scheme and already-encoded credentials,
+ * e.g. `("Preshared", "<psk>")` or `("PrivateToken", "token=<b64>")`.
+ *
+ * Fails with `LK_ERR_INVALID_CONFIG` when this proxy is SOCKS5: the SOCKS5
+ * handshake has no request headers to carry the credential.
+ */
+lk_status_t lk_proxy_config_set_http_auth(struct lk_proxy_config_t *config,
+                                          const char *scheme_ptr,
+                                          size_t scheme_len,
+                                          const char *credentials_ptr,
+                                          size_t credentials_len);
+
+/**
+ * Replace this proxy's credentials with a username/password pair.
+ */
+lk_status_t lk_proxy_config_set_user_pass(struct lk_proxy_config_t *config,
+                                          const char *username_ptr,
+                                          size_t username_len,
+                                          const char *password_ptr,
+                                          size_t password_len);
+
+/**
+ * Borrow this proxy's URL rendering (`scheme://[user:pass@]host:port`).
+ *
+ * The pointer stays valid until the handle is mutated or freed. Credentials
+ * set with `lk_proxy_config_set_http_auth` have no URL form and do not appear.
+ */
+lk_status_t lk_proxy_config_url(const struct lk_proxy_config_t *config,
+                                const char **out_ptr,
+                                size_t *out_len);
+
 void lk_proxy_guard_free(lk_proxy_guard_t *guard);
 
 lk_status_t lk_proxy_guard_mark_bad(lk_proxy_guard_t *guard);
@@ -761,6 +1043,14 @@ lk_status_t lk_proxy_pool_builder_add_proxy(lk_proxy_pool_builder_t *builder,
                                             const char *url_ptr,
                                             size_t url_len);
 
+/**
+ * Add a proxy built with the `lk_proxy_config_*` entry points.
+ *
+ * The configuration is copied; the caller keeps ownership of `config`.
+ */
+lk_status_t lk_proxy_pool_builder_add_proxy_config(lk_proxy_pool_builder_t *builder,
+                                                   const struct lk_proxy_config_t *config);
+
 lk_status_t lk_proxy_pool_builder_build(lk_proxy_pool_builder_t *builder,
                                         lk_proxy_pool_t **out_pool,
                                         lk_error_t **out_err);
@@ -781,6 +1071,36 @@ lk_status_t lk_proxy_pool_builder_set_health_check(lk_proxy_pool_builder_t *buil
                                                    uint16_t port,
                                                    uint64_t interval_ms,
                                                    uint64_t timeout_ms);
+
+/**
+ * Probe `masque://` proxies in this pool with a real CONNECT-UDP handshake
+ * instead of skipping them, verifying the outer connection against `config`.
+ *
+ * This is the fix for a specific false negative. The ordinary health check
+ * opens a TCP connection and calls the proxy alive, which proves nothing about
+ * a MASQUE proxy: CONNECT-UDP rides on an outer HTTP/3 connection, so the
+ * default is to skip `masque://` proxies rather than guess. Turning the probe
+ * on needs trust anchors, and they are not something the pool may guess at
+ * either — a privately-fronted proxy probed against the operating system's
+ * store fails its handshake, and the pool would then blacklist a **healthy**
+ * proxy. So the probe and the anchors arrive together, here.
+ *
+ * Pass the same `lk_masque_config_t` the client uses, so the probe judges the
+ * proxy the way the requests will. The settings are copied; free `config`
+ * whenever you like afterwards.
+ *
+ * Order does not matter relative to `lk_proxy_pool_builder_set_health_check`, but health
+ * checking must be configured by the time the pool is built: a probe with no
+ * health check would never run, so `lk_proxy_pool_builder_build` then fails with
+ * `LK_ERR_INVALID_CONFIG` rather than silently doing nothing.
+ *
+ * Non-MASQUE proxies in the same pool are unaffected and keep their TCP probe.
+ *
+ * Returns `LK_ERR` without the `masque` feature, where there is no
+ * CONNECT-UDP client to probe with.
+ */
+lk_status_t lk_proxy_pool_builder_set_masque_tunnel_probe(lk_proxy_pool_builder_t *builder,
+                                                          const struct lk_masque_config_t *config);
 
 lk_status_t lk_proxy_pool_builder_set_max_proxies(lk_proxy_pool_builder_t *builder, size_t n);
 
@@ -1039,6 +1359,15 @@ lk_status_t lk_session_builder_set_proxy(lk_session_builder_t *builder,
                                          const char *proxy_ptr,
                                          size_t proxy_len);
 
+/**
+ * Use a proxy built with the `lk_proxy_config_*` entry points.
+ *
+ * Takes precedence over `lk_session_builder_set_proxy`. The configuration is
+ * copied; the caller keeps ownership of `config` and must still free it.
+ */
+lk_status_t lk_session_builder_set_proxy_config(lk_session_builder_t *builder,
+                                                const struct lk_proxy_config_t *config);
+
 lk_status_t lk_session_builder_set_retry_exponential(lk_session_builder_t *builder,
                                                      uint32_t max_retries,
                                                      uint64_t base_delay_ms,
@@ -1134,6 +1463,36 @@ lk_status_t lk_session_pool_builder_set_health_check(lk_session_pool_builder_t *
 
 lk_status_t lk_session_pool_builder_set_idle_timeout(lk_session_pool_builder_t *builder,
                                                      uint64_t timeout_ms);
+
+/**
+ * Probe `masque://` proxies in this pool with a real CONNECT-UDP handshake
+ * instead of skipping them, verifying the outer connection against `config`.
+ *
+ * This is the fix for a specific false negative. The ordinary health check
+ * opens a TCP connection and calls the proxy alive, which proves nothing about
+ * a MASQUE proxy: CONNECT-UDP rides on an outer HTTP/3 connection, so the
+ * default is to skip `masque://` proxies rather than guess. Turning the probe
+ * on needs trust anchors, and they are not something the pool may guess at
+ * either — a privately-fronted proxy probed against the operating system's
+ * store fails its handshake, and the pool would then blacklist a **healthy**
+ * proxy. So the probe and the anchors arrive together, here.
+ *
+ * Pass the same `lk_masque_config_t` the client uses, so the probe judges the
+ * proxy the way the requests will. The settings are copied; free `config`
+ * whenever you like afterwards.
+ *
+ * Order does not matter relative to `lk_session_pool_builder_set_health_check`, but health
+ * checking must be configured by the time the pool is built: a probe with no
+ * health check would never run, so `lk_session_pool_builder_build` then fails with
+ * `LK_ERR_INVALID_CONFIG` rather than silently doing nothing.
+ *
+ * Non-MASQUE proxies in the same pool are unaffected and keep their TCP probe.
+ *
+ * Returns `LK_ERR` without the `masque` feature, where there is no
+ * CONNECT-UDP client to probe with.
+ */
+lk_status_t lk_session_pool_builder_set_masque_tunnel_probe(lk_session_pool_builder_t *builder,
+                                                            const struct lk_masque_config_t *config);
 
 lk_status_t lk_session_pool_builder_set_max_sessions(lk_session_pool_builder_t *builder, size_t n);
 

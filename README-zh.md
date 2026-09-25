@@ -22,11 +22,12 @@
 - **Cookie 管理** —— cookie jar、带属性的 `SetCookieWithAttrs`、请求级覆盖
 - **Multipart 上传** —— 文本 + 文件字段,边界与 Chrome 一致(`----WebKitFormBoundary`)
 - **重试策略** —— 固定间隔 / 指数退避(可带 jitter)
-- **代理** —— 会话级 / 请求级 / 代理池 / 会话池,支持轮换、健康检查、坏代理标记
+- **代理** —— 会话级 / 请求级 / 代理池 / 会话池,支持轮换、健康检查、坏代理标记;通过 `ProxyConfig` 使用静态头部凭据(`Preshared`、`PrivateToken`、`Bearer` 等)
+- **MASQUE 代理(实验性)** —— 经 RFC 9298 CONNECT-UDP 代理隧道承载 QUIC,代理一跳可使用私有 CA;需要启用 `masque` 的库
 - **连接预热** —— `Preconnect` / `PreconnectAsync`
 - **自动解压** —— gzip / br / deflate / zstd,可通过 `AcceptEncoding` 控制
 - **证书管理** —— 自定义 CA、校验开关、系统证书、ECH、TLS keylog
-- **Header / Cookie 顺序** —— 可在客户端 / 会话 / 请求三层配置
+- **Header / Cookie 顺序** —— 可在客户端 / 会话 / 请求三层配置;未显式排序的 Cookie 按 Chrome 自身的顺序发送
 - **自定义 DNS** —— 内置 DoH 解析器(Google / Cloudflare / Quad9)或自定义解析回调
 - **SOCKS5 UDP 中继探测** —— 检测 QUIC-over-SOCKS5 所需的 UDP ASSOCIATE 支持
 - **请求诊断** —— 通过 `DiagnosticsJSON()` 获取分阶段耗时(DNS / TCP / TLS / TTFB)
@@ -204,6 +205,49 @@ defer g.Close()
 poolReq, _ := g.NewRequest("GET", "https://example.com")
 ```
 
+### 用户名/密码以外的代理凭据
+
+代理 URL 只能携带用户名和密码。`ProxyConfig` 还能设置静态 HTTP 凭据,以及承载它的请求头:
+
+```go
+proxy, err := lkrequest.ParseProxyConfig("https://proxy.example:443")
+if err != nil {
+	log.Fatal(err)
+}
+defer proxy.Close() // 构造器会复制配置
+
+proxy.SetHTTPAuth("Preshared", "<psk>"). // 发送为 "Preshared <psk>"
+	SetAuthHeader(lkrequest.ProxyAuthHeaderAuthorization) // 默认:Proxy-Authorization
+
+session, err := lkrequest.NewSessionBuilder(client).SetProxyConfig(proxy).Build()
+// 或放入代理池:lkrequest.NewProxyPoolBuilder().AddProxyConfig(proxy)
+```
+
+`proxy.Identity()` 才是 `ProxyPool.MarkBad` 需要的键,代理 URL 不是。标记是异步生效的,`MarkBad` 返回后稍后才会落地。
+
+### MASQUE(实验性)
+
+`masque://` 代理把到源站的 QUIC 连接放进 CONNECT-UDP 隧道承载。`MasqueConfig` 配置到代理的这一跳;
+它的信任设置与客户端的 `SetVerify` 和 CA 证书相互独立。
+
+```go
+masque, err := lkrequest.NewMasqueConfig() // 库不支持 MASQUE 时返回错误
+if err != nil {
+	log.Fatal(err)
+}
+defer masque.Close()
+masque.AddCACertsPEM(caPEM). // 代理一跳使用的私有 CA
+	SetUseNativeCerts(false)
+
+client, _ := lkrequest.NewClientBuilder().SetMasqueConfig(masque).Build()
+proxy, _ := lkrequest.ParseProxyConfig("masque://proxy.example") // 端口默认 443
+session, _ := lkrequest.NewSessionBuilder(client).SetHTTP3Only().SetProxyConfig(proxy).Build()
+```
+
+- MASQUE 路由只承载 HTTP/3。经它发出的 HTTP/1.1 和 HTTP/2 请求会直接失败,而不是改为直连,即使开启了 `SetFallbackProxyToDirect(true)`。
+- 代理池 / 会话池在健康检查中会跳过 `masque://` 代理,除非同时设置 `SetMasqueTunnelProbe(masque)` 与 `SetHealthCheck`。
+- 内嵌库构建时未启用 `masque` feature,因此使用内嵌库时 `NewMasqueConfig` 会返回错误,`masque://` URL 也会被拒绝。
+
 ### 浏览器指纹与随机化
 
 ```go
@@ -295,13 +339,13 @@ go build -tags lkcgo ./lkrequest/...  # cgo
 
 | 分组 | 符号 |
 |---|---|
-| 顶层辅助函数 | `Get`、`PostJSON`、`NewClient`、`NewDefaultClient`、`NewSession`、`NewRequest`、`NewMultipart` |
+| 顶层辅助函数 | `Get`、`PostJSON`、`NewClient`、`NewDefaultClient`、`NewSession`、`NewRequest`、`NewMultipart`、`ParseProxyConfig`、`NewMasqueConfig` |
 | HTTP 动词 | `Session.Get` / `Post` / `Put` / `Delete` / `Head` / `Patch` / `Options` / `Request` —— `SessionPoolGuard` 同样具备 |
 | 构造器 | `NewClientBuilder`、`NewSessionBuilder`、`NewProxyPoolBuilder`、`NewSessionPoolBuilder` |
-| 核心类型 | `Client`、`Session`、`Request`、`Response`、`StreamingResponse`、`ProxyPool`、`SessionPool`、`Multipart`、`Cookie`、`Redirect` |
+| 核心类型 | `Client`、`Session`、`Request`、`Response`、`StreamingResponse`、`ProxyPool`、`SessionPool`、`ProxyConfig`、`MasqueConfig`、`Multipart`、`Cookie`、`Redirect` |
 | 内省 | `ABIVersion`、`LibraryVersion`、`FeatureSupported`、`ListPresetsJSON`、`GetPresetDetailJSON` |
 | 日志 | `InitLog`、`InitLogCallback` |
-| 枚举 | `RandomizeMode`、`FingerprintLayers`、`AcceptEncoding`、`RotationStrategy`、`HttpVersion`、`PreferredHTTPVersion`、`DnsConfig`、`LogLevel` |
+| 枚举 | `RandomizeMode`、`FingerprintLayers`、`AcceptEncoding`、`RotationStrategy`、`HttpVersion`、`PreferredHTTPVersion`、`DnsConfig`、`LogLevel`、`ProxyAuthHeader` |
 
 完整 API 文档:`go doc github.com/EZ-XLabs/lkrequest-go/lkrequest`。
 
@@ -310,4 +354,4 @@ go build -tags lkcgo ./lkrequest/...  # cgo
 - `Client` 和 `Session` 可安全地跨 goroutine 共享;`Request` 发送即失效(复用请用 `Clone()`)。
 - `StreamingResponse` 实现了 `io.ReadCloser`。
 - `ClientBuilder.Build()` **不再**隐式套用 Chrome 头顺序预设;需要特定顺序时请设置指纹,或调用 `AddHeaderOrder` / `AddCookieOrder`。
-- QUIC/H3、自定义 DNS 解析器、SOCKS5 UDP 探测、协议版本偏好/协商、以及合成档 `SetRandomize` 需要库导出对应符号。在较旧的内嵌库上调用会返回 `lk: ... not supported by the loaded lkrequest library` 错误(构造器会延迟到 `Build()` 报告);包本身仍能正常加载。
+- QUIC/H3、自定义 DNS 解析器、SOCKS5 UDP 探测、协议版本偏好/协商、`ProxyConfig` / `MasqueConfig`、以及合成档 `SetRandomize` 需要库导出对应符号。在较旧的内嵌库上调用会返回 `lk: ... not supported by the loaded lkrequest library` 错误(构造器会延迟到 `Build()` 报告);包本身仍能正常加载。
