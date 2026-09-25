@@ -31,8 +31,8 @@ func newProxyConfig(t *testing.T, url string) *ProxyConfig {
 func TestProxyConfigURL(t *testing.T) {
 	config := newProxyConfig(t, "http://proxy.example:8080")
 
-	config.SetUserPass("alice", "s3cret")
-	if got, err := config.URL(); err != nil || got != "http://YOUR_PROXY_USER:YOUR_PROXY_PASS@proxy.example.com:1080" {
+	config.SetUserPass("bob", "pw")
+	if got, err := config.URL(); err != nil || got != "http://bob:pw@proxy.example:8080" {
 		t.Fatalf("URL() after SetUserPass = %q, %v; want the credentials in the URL", got, err)
 	}
 

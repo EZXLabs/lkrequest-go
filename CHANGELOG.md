@@ -2,6 +2,16 @@
 
 All important changes to this project will be documented in this file.
 
+## lkrequest-go 0.2.3
+
+Moves the module to the renamed GitHub organization. The API and the bundled
+`lkrequest-ffi` native engine are unchanged from 0.2.2; the import path is the
+only thing to update.
+
+### ⚠️ Breaking Changes
+
+- **New Module Path** — the module is now `github.com/EZXLabs/lkrequest-go`. Replace `github.com/EZ-XLabs/lkrequest-go/lkrequest` with `github.com/EZXLabs/lkrequest-go/lkrequest` in your imports and `go get github.com/EZXLabs/lkrequest-go/lkrequest@v0.2.3`. Versions up to 0.2.2 declare the old path and can only be fetched under it; requesting them under the new one fails with `module declares its path as: github.com/EZ-XLabs/lkrequest-go`. From 0.2.3 on, only the new path works.
+
 ## lkrequest-go 0.2.2
 
 Updates the bundled `lkrequest-ffi` native engine, adds the Chrome 153,

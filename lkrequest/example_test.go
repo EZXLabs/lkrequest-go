@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	. "github.com/EZ-XLabs/lkrequest-go/lkrequest"
+	. "github.com/EZXLabs/lkrequest-go/lkrequest"
 )
 
 func ExampleGet() {

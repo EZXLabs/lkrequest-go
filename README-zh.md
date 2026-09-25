@@ -1,6 +1,6 @@
 # lkrequest-go
 
-[`lkrequest`](https://github.com/EZ-XLabs/lkrequest) 的 Go 绑定 —— 一个支持字节级
+[`lkrequest`](https://github.com/EZXLabs/lkrequest-rs) 的 Go 绑定 —— 一个支持字节级
 **TLS / HTTP2 / HTTP3(QUIC) 指纹控制**的 Rust HTTP 客户端,适用于浏览器模拟、反检测研究和网页抓取。
 
 [English](README.md) | [简体中文](README-zh.md)
@@ -37,11 +37,11 @@
 ## 安装
 
 ```bash
-go get github.com/EZ-XLabs/lkrequest-go/lkrequest@latest
+go get github.com/EZXLabs/lkrequest-go/lkrequest@latest
 ```
 
 ```go
-import "github.com/EZ-XLabs/lkrequest-go/lkrequest"
+import "github.com/EZXLabs/lkrequest-go/lkrequest"
 ```
 
 ## 快速开始
@@ -347,7 +347,7 @@ go build -tags lkcgo ./lkrequest/...  # cgo
 | 日志 | `InitLog`、`InitLogCallback` |
 | 枚举 | `RandomizeMode`、`FingerprintLayers`、`AcceptEncoding`、`RotationStrategy`、`HttpVersion`、`PreferredHTTPVersion`、`DnsConfig`、`LogLevel`、`ProxyAuthHeader` |
 
-完整 API 文档:`go doc github.com/EZ-XLabs/lkrequest-go/lkrequest`。
+完整 API 文档:`go doc github.com/EZXLabs/lkrequest-go/lkrequest`。
 
 ## 说明
 

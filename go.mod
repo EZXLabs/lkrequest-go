@@ -1,4 +1,4 @@
-module github.com/EZ-XLabs/lkrequest-go
+module github.com/EZXLabs/lkrequest-go
 
 go 1.21
 

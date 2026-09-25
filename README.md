@@ -1,6 +1,6 @@
 # lkrequest-go
 
-Go bindings for [`lkrequest`](https://github.com/EZ-XLabs/lkrequest) — a Rust HTTP client with
+Go bindings for [`lkrequest`](https://github.com/EZXLabs/lkrequest-rs) — a Rust HTTP client with
 byte-level **TLS / HTTP2 / HTTP3(QUIC) fingerprint control**, for browser emulation,
 anti-detection research, and web scraping.
 
@@ -38,11 +38,11 @@ The package wraps the `lkrequest-ffi` C ABI behind a thin, idiomatic Go API:
 ## Installation
 
 ```bash
-go get github.com/EZ-XLabs/lkrequest-go/lkrequest@latest
+go get github.com/EZXLabs/lkrequest-go/lkrequest@latest
 ```
 
 ```go
-import "github.com/EZ-XLabs/lkrequest-go/lkrequest"
+import "github.com/EZXLabs/lkrequest-go/lkrequest"
 ```
 
 ## Quick Start
@@ -355,7 +355,7 @@ go build -tags lkcgo ./lkrequest/...  # cgo
 | Logging | `InitLog`, `InitLogCallback` |
 | Enums | `RandomizeMode`, `FingerprintLayers`, `AcceptEncoding`, `RotationStrategy`, `HttpVersion`, `PreferredHTTPVersion`, `DnsConfig`, `LogLevel`, `ProxyAuthHeader` |
 
-Full API docs: `go doc github.com/EZ-XLabs/lkrequest-go/lkrequest`.
+Full API docs: `go doc github.com/EZXLabs/lkrequest-go/lkrequest`.
 
 ## Notes
 
