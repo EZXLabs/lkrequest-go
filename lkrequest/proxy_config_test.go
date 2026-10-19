@@ -223,8 +223,8 @@ func TestProxyPoolMarkBadByIdentity(t *testing.T) {
 		t.Fatalf("MarkBad() error = %v", err)
 	}
 
-	// The library records the mark on a background task, so the cooldown
-	// lands shortly after MarkBad returns rather than before.
+	// Older libraries recorded the mark on a background task, so the cooldown
+	// could land shortly after MarkBad returned; allow it a moment.
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		after := acquired()

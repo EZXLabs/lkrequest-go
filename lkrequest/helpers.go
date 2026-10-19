@@ -29,9 +29,35 @@ func ffiBool(v uintptr) bool {
 	return v&0xFF != 0
 }
 
+// heapSink is never written; see escapeToHeap.
+var heapSink struct {
+	never bool
+	p     unsafe.Pointer
+}
+
+// escapeToHeap forces the object p points into to be allocated on the heap.
+//
+// Go memory reaches the library as a uintptr, and the runtime does not update
+// a uintptr when it moves a goroutine stack — which it does whenever the stack
+// grows, or shrinks during GC. Memory on a stack can therefore move between
+// taking its address and the native call reading it, leaving the library to
+// read a freed stack: garbage arguments with purego, and with cgo a fatal
+// "found bad pointer in Go heap" once the stale pointer is scanned. Without
+// help, escape analysis keeps small non-escaping buffers on the stack, because
+// a uintptr conversion does not count as an escape. The store below never
+// runs, but the compiler cannot tell, so p escapes and the object is heap
+// allocated, where it does not move.
+func escapeToHeap(p unsafe.Pointer) {
+	if heapSink.never {
+		heapSink.p = p
+	}
+}
+
 func stringToCString(s string) (uintptr, []byte) {
 	buf := append([]byte(s), 0)
-	return uintptr(unsafe.Pointer(&buf[0])), buf
+	p := unsafe.Pointer(&buf[0])
+	escapeToHeap(p)
+	return uintptr(p), buf
 }
 
 func optionalStringToCString(s string) (uintptr, []byte) {
@@ -41,11 +67,16 @@ func optionalStringToCString(s string) (uintptr, []byte) {
 	return stringToCString(s)
 }
 
+// bytesPtr returns the address of b's data for the library. It makes b's
+// backing array escape, so a caller's small local slice is heap allocated
+// rather than handed over from a stack that may move; see escapeToHeap.
 func bytesPtr(b []byte) uintptr {
 	if len(b) == 0 {
 		return 0
 	}
-	return uintptr(unsafe.Pointer(unsafe.SliceData(b)))
+	p := unsafe.Pointer(unsafe.SliceData(b))
+	escapeToHeap(p)
+	return uintptr(p)
 }
 
 func goStringN(ptr unsafe.Pointer, n uintptr) string {

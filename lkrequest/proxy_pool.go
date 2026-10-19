@@ -25,6 +25,8 @@ func newProxyGuardFromPtr(ptr uintptr) *ProxyGuard {
 	return g
 }
 
+// URL returns the URL of the proxy the lease holds, or "" for a lease from a
+// pool built without any proxy, which connects directly.
 func (g *ProxyGuard) URL() string {
 	defer runtime.KeepAlive(g)
 	if g == nil || g.ptr == 0 {
@@ -84,6 +86,10 @@ func (p *ProxyPool) loadPtr() uintptr {
 	return atomic.LoadUintptr(&p.ptr)
 }
 
+// Acquire leases a proxy, blocking until the pool can hand one out. A pool
+// with proxies never answers with a direct lease: while every proxy is cooling
+// down, Acquire waits for one to recover, and once every proxy is removed for
+// good it never returns. Use AcquireAsync to bound the wait.
 func (p *ProxyPool) Acquire() (*ProxyGuard, error) {
 	ptr := p.loadPtr()
 	if ptr == 0 {
@@ -109,6 +115,8 @@ func (p *ProxyPool) Acquire() (*ProxyGuard, error) {
 	return newProxyGuardFromPtr(outGuard), nil
 }
 
+// AcquireAsync is Acquire bounded by ctx. If ctx ends first, it gives up the
+// wait, frees the permit the acquisition held, and returns ctx's error.
 func (p *ProxyPool) AcquireAsync(ctx context.Context) (*ProxyGuard, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -143,6 +151,8 @@ func (p *ProxyPool) AcquireAsync(ctx context.Context) (*ProxyGuard, error) {
 	return takeProxyGuardFromOp(outOp, state)
 }
 
+// AcquireFresh marks badGuard's proxy bad and leases a proxy again, waiting as
+// Acquire does. badGuard keeps its permit until it is closed.
 func (p *ProxyPool) AcquireFresh(badGuard *ProxyGuard) (*ProxyGuard, error) {
 	ptr := p.loadPtr()
 	if ptr == 0 {
@@ -175,9 +185,8 @@ func (p *ProxyPool) AcquireFresh(badGuard *ProxyGuard) (*ProxyGuard, error) {
 }
 
 // MarkBad records a failure against the proxy with the given identity, as
-// reported by ProxyConfig.Identity — not its URL, which matches nothing. The
-// failure is recorded asynchronously, so a cooldown it triggers takes effect
-// shortly after MarkBad returns.
+// reported by ProxyConfig.Identity — not its URL, which matches nothing. A
+// cooldown or removal the failure triggers is in effect when MarkBad returns.
 func (p *ProxyPool) MarkBad(identity string) error {
 	ptr := p.loadPtr()
 	if ptr == 0 {
@@ -323,7 +332,10 @@ func (b *ProxyPoolBuilder) AddProxies(urls []string) *ProxyPoolBuilder {
 		bufs[i] = buf
 	}
 
-	status := ffi_lk_proxy_pool_builder_add_proxies(b.ptr, uintptr(unsafe.Pointer(&ptrs[0])), uintptr(unsafe.Pointer(&lens[0])), uintptr(len(urls)))
+	ptrsPtr, lensPtr := unsafe.Pointer(&ptrs[0]), unsafe.Pointer(&lens[0])
+	escapeToHeap(ptrsPtr)
+	escapeToHeap(lensPtr)
+	status := ffi_lk_proxy_pool_builder_add_proxies(b.ptr, uintptr(ptrsPtr), uintptr(lensPtr), uintptr(len(urls)))
 	runtime.KeepAlive(ptrs)
 	runtime.KeepAlive(lens)
 	runtime.KeepAlive(bufs)

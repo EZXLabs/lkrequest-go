@@ -343,3 +343,14 @@ var (
 	ffi_lk_proxy_pool_builder_set_masque_tunnel_probe   func(builder uintptr, config uintptr) int32
 	ffi_lk_session_pool_builder_set_masque_tunnel_probe func(builder uintptr, config uintptr) int32
 )
+
+// Session cookie readers that keep each cookie's attributes.
+var (
+	ffi_lk_session_get_cookies_with_attrs_json func(session uintptr, urlPtr uintptr, urlLen uintptr, outJSONPtr uintptr, outJSONLen uintptr, outErr uintptr) int32
+	ffi_lk_session_get_all_cookies_json        func(session uintptr, outJSONPtr uintptr, outJSONLen uintptr, outErr uintptr) int32
+)
+
+// Per-request legacy H2 HEADERS priority weight.
+var (
+	ffi_lk_request_set_h2_priority_weight func(request uintptr, weight uint32) int32
+)

@@ -27,8 +27,11 @@ func setSessionPoolProvider(builder uintptr, provider ffiProxyProvider) int32 {
 
 // setClientBuilderDNSResolver passes a resolver to the client builder.
 // The cgo wrapper in binding_cgo.go immediately dereferences the pointer and
-// passes the value to C, leaving no callback re-entry window while the local
-// address is exposed.
+// passes the value to C, leaving no callback re-entry window while the address
+// is exposed. resolver is still kept off the stack: entering the wrapper can
+// grow and move the stack before it dereferences; see escapeToHeap.
 func setClientBuilderDNSResolver(builder uintptr, resolver ffiDNSResolver) int32 {
-	return ffi_lk_client_builder_set_dns_resolver(builder, uintptr(unsafe.Pointer(&resolver)))
+	p := unsafe.Pointer(&resolver)
+	escapeToHeap(p)
+	return ffi_lk_client_builder_set_dns_resolver(builder, uintptr(p))
 }

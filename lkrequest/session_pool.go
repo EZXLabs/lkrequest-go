@@ -93,6 +93,10 @@ func (p *SessionPool) loadPtr() uintptr {
 	return atomic.LoadUintptr(&p.ptr)
 }
 
+// Acquire leases a session: an idle one when there is one, otherwise a new
+// session on a newly leased proxy. Leasing the proxy waits as
+// ProxyPool.Acquire does, so while every proxy is cooling down or removed,
+// Acquire blocks. Use AcquireAsync to bound the wait.
 func (p *SessionPool) Acquire() (*SessionPoolGuard, error) {
 	ptr := p.loadPtr()
 	if ptr == 0 {
@@ -118,6 +122,8 @@ func (p *SessionPool) Acquire() (*SessionPoolGuard, error) {
 	return newSessionPoolGuardFromPtr(outGuard), nil
 }
 
+// AcquireAsync is Acquire bounded by ctx. If ctx ends first, it gives up the
+// wait and returns ctx's error.
 func (p *SessionPool) AcquireAsync(ctx context.Context) (*SessionPoolGuard, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -152,6 +158,9 @@ func (p *SessionPool) AcquireAsync(ctx context.Context) (*SessionPoolGuard, erro
 	return takeSessionPoolGuardFromOp(outOp, state)
 }
 
+// AcquireFresh marks badGuard as MarkBad does and acquires another session.
+// badGuard keeps its proxy permit until it is closed, so with every permit in
+// use, close badGuard and call Acquire instead.
 func (p *SessionPool) AcquireFresh(badGuard *SessionPoolGuard) (*SessionPoolGuard, error) {
 	ptr := p.loadPtr()
 	if ptr == 0 {
@@ -183,6 +192,8 @@ func (p *SessionPool) AcquireFresh(badGuard *SessionPoolGuard) (*SessionPoolGuar
 	return newSessionPoolGuardFromPtr(outGuard), nil
 }
 
+// MarkBad records a failure against the proxy of guard's session, and makes
+// closing guard discard that session rather than return it to the idle pool.
 func (p *SessionPool) MarkBad(guard *SessionPoolGuard) error {
 	ptr := p.loadPtr()
 	if ptr == 0 {
@@ -361,7 +372,10 @@ func (b *SessionPoolBuilder) AddProxies(urls []string) *SessionPoolBuilder {
 		bufs[i] = buf
 	}
 
-	status := ffi_lk_session_pool_builder_add_proxies(b.ptr, uintptr(unsafe.Pointer(&ptrs[0])), uintptr(unsafe.Pointer(&lens[0])), uintptr(len(urls)))
+	ptrsPtr, lensPtr := unsafe.Pointer(&ptrs[0]), unsafe.Pointer(&lens[0])
+	escapeToHeap(ptrsPtr)
+	escapeToHeap(lensPtr)
+	status := ffi_lk_session_pool_builder_add_proxies(b.ptr, uintptr(ptrsPtr), uintptr(lensPtr), uintptr(len(urls)))
 	runtime.KeepAlive(ptrs)
 	runtime.KeepAlive(lens)
 	runtime.KeepAlive(bufs)

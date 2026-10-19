@@ -80,7 +80,7 @@ func TestChrome153TrustAnchorIdsReduced(t *testing.T) {
 //
 // chrome_152 is checked alongside chrome_153 because this changed an already
 // released preset; asserting only the new one would miss that regression.
-// chrome_154 inherits both rules from chrome_153.
+// chrome_154 and chrome_155 inherit both rules from chrome_153.
 //
 // chrome_152 is also why the skip here cannot key off the preset resolving:
 // unlike chrome_153, it exists in libraries that predate these rules, so
@@ -91,7 +91,7 @@ func TestChromiumQUICWireGeneration(t *testing.T) {
 		t.Skip("quic-h3 is not supported by the loaded lkrequest library")
 	}
 
-	for _, preset := range []string{"chrome_152", "chrome_153", "chrome_154"} {
+	for _, preset := range []string{"chrome_152", "chrome_153", "chrome_154", "chrome_155"} {
 		t.Run(preset, func(t *testing.T) {
 			info := presetFingerprint(t, preset)
 			if info.Quic == nil {

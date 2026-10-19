@@ -17,10 +17,10 @@ The package wraps the `lkrequest-ffi` C ABI behind a thin, idiomatic Go API:
 
 - **Browser fingerprint presets** — Chrome / Firefox / Safari TLS+HTTP2 fingerprints by name
 - **Fingerprint randomization** — per-connection TLS extension-order jitter (drifts JA3, stays a real browser); synthetic cross-layer identities with the `synthetic-fp` library
-- **HTTP/2 & HTTP/3 (QUIC)** — Alt-Svc discovery, per-request protocol preference, H3 header order
+- **HTTP/2 & HTTP/3 (QUIC)** — Alt-Svc discovery, per-request protocol preference, H3 header order, per-request HTTP/2 priority weight
 - **Dual engine** — default `purego` (no C compiler, embedded library) or `lkcgo` (static CGo link)
 - **Streaming responses** — `SendStreaming()` returns an `io.ReadCloser`
-- **Cookie management** — jar, attribute-aware `SetCookieWithAttrs`, per-request override
+- **Cookie management** — jar, attribute-aware `SetCookieWithAttrs` / `GetCookiesWithAttrs` / `GetAllCookies`, per-request override
 - **Multipart upload** — text + file parts, with Chrome-accurate `----WebKitFormBoundary` boundaries
 - **Retry strategies** — fixed interval / exponential backoff (with jitter)
 - **Proxy** — per-session / per-request / proxy pool / session pool, with rotation, health checks, and bad-proxy marking; static header credentials (`Preshared`, `PrivateToken`, `Bearer`, …) via `ProxyConfig`
@@ -161,6 +161,10 @@ session.SetCookieWithAttrs("https://example.com", "sid", "xyz", lkrequest.Cookie
 val, _ := session.GetCookie("https://example.com", "token")
 jar, _ := session.GetCookies("https://example.com") // []Cookie; GetCookiesJSON returns the raw payload
 
+// With attributes: domain, path, Secure, HttpOnly, SameSite and expiry (nil for a session cookie)
+scoped, _ := session.GetCookiesWithAttrs("https://example.com/api") // []CookieInfo, longest path first
+all, _ := session.GetAllCookies()                                   // every domain, oldest first — the view to persist
+
 req.SetCookieOverride("token", "fresh-value") // per-request override of the jar
 ```
 
@@ -207,6 +211,13 @@ defer g.Close()
 poolReq, _ := g.NewRequest("GET", "https://example.com")
 ```
 
+A pool with proxies never falls back to a direct connection. While every proxy
+is cooling down, `Acquire` waits for one to recover; once every proxy is removed
+for good, it waits forever. Bound the wait with `AcquireAsync(ctx)`, which gives
+up when `ctx` ends. Only a pool built without any proxy hands out direct leases,
+whose `URL()` is `""`. After `SessionPool.MarkBad(g)`, closing `g` discards its
+session instead of returning it to the idle pool.
+
 ### Proxy credentials beyond username/password
 
 A proxy URL only carries a username and password. `ProxyConfig` also takes a
@@ -227,7 +238,7 @@ session, err := lkrequest.NewSessionBuilder(client).SetProxyConfig(proxy).Build(
 ```
 
 `proxy.Identity()` is the key `ProxyPool.MarkBad` expects — a proxy URL is not.
-The mark is applied asynchronously, shortly after `MarkBad` returns.
+The mark is in effect when `MarkBad` returns.
 
 ### MASQUE (experimental)
 
@@ -270,6 +281,16 @@ client, _ := lkrequest.NewClientBuilder().
 
 `RandomizeRecombine` / `RandomizeFull` synthesize non-browser fingerprints (for blocklist targets)
 and require a library built with the `synthetic-fp` feature; otherwise `SetRandomize` returns an error.
+
+A request can override the weight its HTTP/2 HEADERS frame carries in the legacy
+priority field, for a request the browser weighs differently from the preset's
+default. It leaves the `priority` header alone; HTTP/1.1 and HTTP/3 ignore it.
+
+```go
+resp, err := session.Get("https://example.com/").
+	SetH2PriorityWeight(21). // the wire value, 0-255 (weight 22)
+	Send()
+```
 
 ### QUIC / HTTP3
 
@@ -350,7 +371,7 @@ go build -tags lkcgo ./lkrequest/...  # cgo
 | Top-level helpers | `Get`, `PostJSON`, `NewClient`, `NewDefaultClient`, `NewSession`, `NewRequest`, `NewMultipart`, `ParseProxyConfig`, `NewMasqueConfig` |
 | HTTP verbs | `Session.Get` / `Post` / `Put` / `Delete` / `Head` / `Patch` / `Options` / `Request` — same set on `SessionPoolGuard` |
 | Builders | `NewClientBuilder`, `NewSessionBuilder`, `NewProxyPoolBuilder`, `NewSessionPoolBuilder` |
-| Core types | `Client`, `Session`, `Request`, `Response`, `StreamingResponse`, `ProxyPool`, `SessionPool`, `ProxyConfig`, `MasqueConfig`, `Multipart`, `Cookie`, `Redirect` |
+| Core types | `Client`, `Session`, `Request`, `Response`, `StreamingResponse`, `ProxyPool`, `SessionPool`, `ProxyConfig`, `MasqueConfig`, `Multipart`, `Cookie`, `CookieInfo`, `Redirect` |
 | Introspection | `ABIVersion`, `LibraryVersion`, `FeatureSupported`, `ListPresetsJSON`, `GetPresetDetailJSON` |
 | Logging | `InitLog`, `InitLogCallback` |
 | Enums | `RandomizeMode`, `FingerprintLayers`, `AcceptEncoding`, `RotationStrategy`, `HttpVersion`, `PreferredHTTPVersion`, `DnsConfig`, `LogLevel`, `ProxyAuthHeader` |
@@ -361,5 +382,5 @@ Full API docs: `go doc github.com/EZXLabs/lkrequest-go/lkrequest`.
 
 - `Client` and `Session` are safe to share across goroutines; `Request` is consume-on-send (reuse via `Clone()`).
 - `StreamingResponse` implements `io.ReadCloser`.
-- `ClientBuilder.Build()` does **not** apply an implicit Chrome header-order preset; set a fingerprint or call `AddHeaderOrder` / `AddCookieOrder` when you need a specific order.
-- QUIC/H3, custom DNS resolver, SOCKS5 UDP probe, preferred/negotiated HTTP version, `ProxyConfig` / `MasqueConfig`, and synthetic `SetRandomize` tiers require a library that exports the corresponding symbols. Against an older embedded library these return an `lk: ... not supported by the loaded lkrequest library` error (builders defer it to `Build()`); the package still loads normally.
+- A `ClientBuilder` built without `SetPreset`, like `NewDefaultClient()`, uses the library's default preset — currently `chrome_155` — header order included. Call `SetPreset` for another fingerprint, or `AddHeaderOrder` / `AddCookieOrder` to pin a specific order.
+- QUIC/H3, custom DNS resolver, SOCKS5 UDP probe, preferred/negotiated HTTP version, `ProxyConfig` / `MasqueConfig`, cookie attribute readers, the per-request H2 priority weight, and synthetic `SetRandomize` tiers require a library that exports the corresponding symbols. Against an older embedded library these return an `lk: ... not supported by the loaded lkrequest library` error (builders defer it to `Build()`); the package still loads normally.

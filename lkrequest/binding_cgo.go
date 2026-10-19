@@ -1107,4 +1107,30 @@ func init() {
 	ffi_lk_session_pool_builder_set_masque_tunnel_probe = func(builder uintptr, config uintptr) int32 {
 		return int32(C.lk_session_pool_builder_set_masque_tunnel_probe((*C.lk_session_pool_builder_t)(unsafe.Pointer(builder)), (*C.lk_masque_config_t)(unsafe.Pointer(config))))
 	}
+
+	// Session cookie readers with attributes
+	ffi_lk_session_get_cookies_with_attrs_json = func(session uintptr, urlPtr uintptr, urlLen uintptr, outJSONPtr uintptr, outJSONLen uintptr, outErr uintptr) int32 {
+		return int32(C.lk_session_get_cookies_with_attrs_json(
+			(*C.lk_session_t)(unsafe.Pointer(session)),
+			(*C.char)(unsafe.Pointer(urlPtr)),
+			C.size_t(urlLen),
+			(**C.char)(unsafe.Pointer(outJSONPtr)),
+			(*C.size_t)(unsafe.Pointer(outJSONLen)),
+			(**C.lk_error_t)(unsafe.Pointer(outErr)),
+		))
+	}
+
+	ffi_lk_session_get_all_cookies_json = func(session uintptr, outJSONPtr uintptr, outJSONLen uintptr, outErr uintptr) int32 {
+		return int32(C.lk_session_get_all_cookies_json(
+			(*C.lk_session_t)(unsafe.Pointer(session)),
+			(**C.char)(unsafe.Pointer(outJSONPtr)),
+			(*C.size_t)(unsafe.Pointer(outJSONLen)),
+			(**C.lk_error_t)(unsafe.Pointer(outErr)),
+		))
+	}
+
+	// Per-request H2 priority weight
+	ffi_lk_request_set_h2_priority_weight = func(request uintptr, weight uint32) int32 {
+		return int32(C.lk_request_set_h2_priority_weight((*C.lk_request_t)(unsafe.Pointer(request)), C.uint32_t(weight)))
+	}
 }

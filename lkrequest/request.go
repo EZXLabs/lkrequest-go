@@ -353,7 +353,9 @@ func (r *Request) applyFormPairs(pairs []formKV) *Request {
 
 	var pairsPtr uintptr
 	if len(ffiPairs) > 0 {
-		pairsPtr = uintptr(unsafe.Pointer(&ffiPairs[0]))
+		p := unsafe.Pointer(&ffiPairs[0])
+		escapeToHeap(p)
+		pairsPtr = uintptr(p)
 	}
 
 	status := ffi_lk_request_set_form(r.ptr, pairsPtr, uintptr(len(ffiPairs)))
@@ -539,6 +541,39 @@ func (r *Request) SetPreferredHTTPVersion(v PreferredHTTPVersion) *Request {
 
 	r.replay = append(r.replay, func(clone *Request) *Request {
 		return clone.SetPreferredHTTPVersion(v)
+	})
+	return r
+}
+
+// SetH2PriorityWeight sets the weight in the legacy priority field of this
+// request's HTTP/2 HEADERS frame, as it goes on the wire: 0-255, one less than
+// the 1-256 weight it encodes. It applies whether the request opens a
+// connection or reuses one, and leaves the priority header, the stream
+// dependency and the exclusive flag alone; requests that do not set it keep
+// the weight their profile sends. A profile whose HEADERS carry no legacy
+// priority field still sends none, and HTTP/1.1 and HTTP/3 ignore it.
+//
+// A library that predates the setter reports an unsupported error at send.
+func (r *Request) SetH2PriorityWeight(weight uint8) *Request {
+	if !r.checkMutable() {
+		return r
+	}
+	if ffi_lk_request_set_h2_priority_weight == nil {
+		if r.firstErr == nil {
+			r.firstErr = unsupportedError("request set h2 priority weight")
+		}
+		return r
+	}
+
+	if !r.setStatus(
+		ffi_lk_request_set_h2_priority_weight(r.ptr, uint32(weight)),
+		"request set h2 priority weight",
+	) {
+		return r
+	}
+
+	r.replay = append(r.replay, func(clone *Request) *Request {
+		return clone.SetH2PriorityWeight(weight)
 	})
 	return r
 }

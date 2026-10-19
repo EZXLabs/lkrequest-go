@@ -24,6 +24,11 @@ type Session struct {
 	ptr    uintptr
 	once   sync.Once
 	client *Client
+	// cookieMu serializes the cookie calls on this handle. The library lends
+	// cookie readers a buffer it frees when the same query repeats or a cookie
+	// is set, removed or cleared, so each read holds the lock until it has
+	// copied the buffer. Clones get their own handle and buffers.
+	cookieMu sync.Mutex
 }
 
 type SessionBuilder struct {
@@ -131,6 +136,8 @@ func (s *Session) SetCookie(url, name, value string) error {
 	if p == 0 {
 		return ErrNilHandle
 	}
+	s.cookieMu.Lock()
+	defer s.cookieMu.Unlock()
 
 	urlPtr, urlBuf := stringToCString(url)
 	namePtr, nameBuf := stringToCString(name)
@@ -147,6 +154,8 @@ func (s *Session) SetCookieWithAttrs(url, name, value string, attrs CookieAttrs)
 	if p == 0 {
 		return ErrNilHandle
 	}
+	s.cookieMu.Lock()
+	defer s.cookieMu.Unlock()
 
 	urlPtr, urlBuf := stringToCString(url)
 	namePtr, nameBuf := stringToCString(name)
@@ -189,6 +198,8 @@ func (s *Session) RemoveCookie(url, name string) error {
 	if p == 0 {
 		return ErrNilHandle
 	}
+	s.cookieMu.Lock()
+	defer s.cookieMu.Unlock()
 
 	urlPtr, urlBuf := stringToCString(url)
 	namePtr, nameBuf := stringToCString(name)
@@ -204,13 +215,16 @@ func (s *Session) GetCookie(url, name string) (string, error) {
 	if p == 0 {
 		return "", ErrNilHandle
 	}
+	s.cookieMu.Lock()
+	defer s.cookieMu.Unlock()
 
 	urlPtr, urlBuf := stringToCString(url)
 	namePtr, nameBuf := stringToCString(name)
 	cell := acquireFFIOutCell()
 	defer ffiOutCellPool.Put(cell)
 	status := ffi_lk_session_get_cookie(p, urlPtr, uintptr(len(url)), namePtr, uintptr(len(name)), uintptr(unsafe.Pointer(&cell[0])), uintptr(unsafe.Pointer(&cell[1])), uintptr(unsafe.Pointer(&cell[2])))
-	outValuePtr, outValueLen, outErr := unsafe.Pointer(cell[0]), cell[1], cell[2]
+	value := goStringN(unsafe.Pointer(cell[0]), cell[1])
+	outErr := cell[2]
 	runtime.KeepAlive(urlBuf)
 	runtime.KeepAlive(nameBuf)
 	if err := extractError(outErr); err != nil {
@@ -219,7 +233,7 @@ func (s *Session) GetCookie(url, name string) (string, error) {
 	if err := statusError(status, "session get cookie"); err != nil {
 		return "", err
 	}
-	return goStringN(outValuePtr, outValueLen), nil
+	return value, nil
 }
 
 func (s *Session) GetCookiesJSON(url string) (string, error) {
@@ -228,16 +242,19 @@ func (s *Session) GetCookiesJSON(url string) (string, error) {
 	if p == 0 {
 		return "", ErrNilHandle
 	}
+	s.cookieMu.Lock()
+	defer s.cookieMu.Unlock()
 
 	urlPtr, urlBuf := stringToCString(url)
 	cell := acquireFFIOutCell()
 	defer ffiOutCellPool.Put(cell)
 	status := ffi_lk_session_get_cookies_json(p, urlPtr, uintptr(len(url)), uintptr(unsafe.Pointer(&cell[0])))
+	raw := goCString(unsafe.Pointer(cell[0]))
 	runtime.KeepAlive(urlBuf)
 	if err := statusError(status, "session get cookies json"); err != nil {
 		return "", err
 	}
-	return goCString(unsafe.Pointer(cell[0])), nil
+	return raw, nil
 }
 
 // GetCookies returns the session cookies that would be sent to url, decoded
@@ -260,12 +277,75 @@ func (s *Session) GetCookies(url string) ([]Cookie, error) {
 	return cookies, nil
 }
 
+// GetCookiesWithAttrs returns the unexpired session cookies that would be sent
+// to url, each with its attributes, longest path first and then oldest first.
+// Unlike GetCookies, cookies sharing a name at different paths can be told
+// apart. An invalid url, or one no cookie matches, yields no cookies.
+func (s *Session) GetCookiesWithAttrs(url string) ([]CookieInfo, error) {
+	const action = "session get cookies with attrs"
+	if ffi_lk_session_get_cookies_with_attrs_json == nil {
+		return nil, unsupportedError(action)
+	}
+
+	return s.cookieInfos(action, func(p, outJSONPtr, outJSONLen, outErr uintptr) int32 {
+		urlPtr, urlBuf := stringToCString(url)
+		status := ffi_lk_session_get_cookies_with_attrs_json(p, urlPtr, uintptr(len(url)), outJSONPtr, outJSONLen, outErr)
+		runtime.KeepAlive(urlBuf)
+		return status
+	})
+}
+
+// GetAllCookies returns every unexpired cookie in the session across all
+// domains and paths, Secure and HttpOnly ones included, oldest first. It is
+// the view to persist or to hand to another HTTP client or browser.
+func (s *Session) GetAllCookies() ([]CookieInfo, error) {
+	const action = "session get all cookies"
+	if ffi_lk_session_get_all_cookies_json == nil {
+		return nil, unsupportedError(action)
+	}
+
+	return s.cookieInfos(action, ffi_lk_session_get_all_cookies_json)
+}
+
+// cookieInfos runs a cookie-attribute reader under cookieMu and decodes its
+// JSON. The library lends the JSON out, so it is copied before the lock is
+// released; read builds any C strings itself, after the lock is held.
+func (s *Session) cookieInfos(action string, read func(session, outJSONPtr, outJSONLen, outErr uintptr) int32) ([]CookieInfo, error) {
+	defer runtime.KeepAlive(s)
+	p := s.loadPtr()
+	if p == 0 {
+		return nil, ErrNilHandle
+	}
+	s.cookieMu.Lock()
+	defer s.cookieMu.Unlock()
+
+	cell := acquireFFIOutCell()
+	defer ffiOutCellPool.Put(cell)
+	status := read(p, uintptr(unsafe.Pointer(&cell[0])), uintptr(unsafe.Pointer(&cell[1])), uintptr(unsafe.Pointer(&cell[2])))
+	raw := goStringN(unsafe.Pointer(cell[0]), cell[1])
+	if err := extractError(cell[2]); err != nil {
+		return nil, err
+	}
+	if err := statusError(status, action); err != nil {
+		return nil, err
+	}
+
+	var cookies []CookieInfo
+	if err := json.Unmarshal([]byte(raw), &cookies); err != nil {
+		return nil, fmt.Errorf("lk: decode %s: %w", action, err)
+	}
+	return cookies, nil
+}
+
 func (s *Session) ClearCookies() error {
 	p := s.loadPtr()
 	if p == 0 {
 		return ErrNilHandle
 	}
-	return statusError(ffi_lk_session_clear_cookies(p), "session clear cookies")
+	s.cookieMu.Lock()
+	defer s.cookieMu.Unlock()
+	status := ffi_lk_session_clear_cookies(p)
+	return statusError(status, "session clear cookies")
 }
 
 func (s *Session) Preconnect(url string) error {

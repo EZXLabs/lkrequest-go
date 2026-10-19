@@ -618,7 +618,7 @@ func TestSessionPoolAcquireFlows(t *testing.T) {
 		SetProxyBuffer(2).
 		SetMaxSessions(2).
 		SetIdleTimeout(2_000).
-		SetBadProxyConfig(1, 100, 250, 1).
+		SetBadProxyConfig(1, 100, 250, 5).
 		Build()
 	if err != nil {
 		t.Fatalf("SessionPoolBuilder.Build() error = %v", err)
@@ -655,7 +655,13 @@ func TestSessionPoolAcquireFlows(t *testing.T) {
 	}
 	fresh.Close()
 
-	asyncGuard, err := pool.AcquireAsync(context.Background())
+	// Both proxies are cooling down now. The pool waits for one to recover
+	// instead of handing out a direct session, so this completes once the
+	// 250 ms cooldown ends. A proxy removed for good (maxCooldowns 1) would
+	// leave it waiting until ctx expires.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	asyncGuard, err := pool.AcquireAsync(ctx)
 	if err != nil {
 		t.Fatalf("AcquireAsync() error = %v", err)
 	}

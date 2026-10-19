@@ -278,6 +278,11 @@ func init() {
 	registerOptional(&ffi_lk_client_builder_set_masque_config, handle, "lk_client_builder_set_masque_config")
 	registerOptional(&ffi_lk_proxy_pool_builder_set_masque_tunnel_probe, handle, "lk_proxy_pool_builder_set_masque_tunnel_probe")
 	registerOptional(&ffi_lk_session_pool_builder_set_masque_tunnel_probe, handle, "lk_session_pool_builder_set_masque_tunnel_probe")
+	// Session cookie readers with attributes
+	registerOptional(&ffi_lk_session_get_cookies_with_attrs_json, handle, "lk_session_get_cookies_with_attrs_json")
+	registerOptional(&ffi_lk_session_get_all_cookies_json, handle, "lk_session_get_all_cookies_json")
+	// Per-request H2 priority weight
+	registerOptional(&ffi_lk_request_set_h2_priority_weight, handle, "lk_request_set_h2_priority_weight")
 }
 
 // registerOptional registers an FFI symbol that may be absent from older

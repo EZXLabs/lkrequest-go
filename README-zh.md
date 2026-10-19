@@ -16,10 +16,10 @@
 
 - **浏览器指纹预设** —— 按名称使用 Chrome / Firefox / Safari 的 TLS+HTTP2 指纹
 - **指纹随机化** —— 逐连接的 TLS 扩展顺序抖动(漂移 JA3,仍是真实浏览器);配合 `synthetic-fp` 库可合成跨层身份
-- **HTTP/2 & HTTP/3(QUIC)** —— Alt-Svc 发现、请求级协议偏好、H3 头顺序
+- **HTTP/2 & HTTP/3(QUIC)** —— Alt-Svc 发现、请求级协议偏好、H3 头顺序、请求级 HTTP/2 优先级权重
 - **双引擎** —— 默认 `purego`(无需 C 编译器,内嵌动态库)或 `lkcgo`(CGo 静态链接)
 - **流式响应** —— `SendStreaming()` 返回 `io.ReadCloser`
-- **Cookie 管理** —— cookie jar、带属性的 `SetCookieWithAttrs`、请求级覆盖
+- **Cookie 管理** —— cookie jar、带属性的 `SetCookieWithAttrs` / `GetCookiesWithAttrs` / `GetAllCookies`、请求级覆盖
 - **Multipart 上传** —— 文本 + 文件字段,边界与 Chrome 一致(`----WebKitFormBoundary`)
 - **重试策略** —— 固定间隔 / 指数退避(可带 jitter)
 - **代理** —— 会话级 / 请求级 / 代理池 / 会话池,支持轮换、健康检查、坏代理标记;通过 `ProxyConfig` 使用静态头部凭据(`Preshared`、`PrivateToken`、`Bearer` 等)
@@ -159,6 +159,10 @@ session.SetCookieWithAttrs("https://example.com", "sid", "xyz", lkrequest.Cookie
 val, _ := session.GetCookie("https://example.com", "token")
 jar, _ := session.GetCookies("https://example.com") // []Cookie;GetCookiesJSON 返回原始 JSON
 
+// 带属性读取:domain、path、Secure、HttpOnly、SameSite 与过期时间(会话 cookie 为 nil)
+scoped, _ := session.GetCookiesWithAttrs("https://example.com/api") // []CookieInfo,path 长的在前
+all, _ := session.GetAllCookies()                                   // 跨所有域名,按创建时间从早到晚 —— 适合持久化
+
 req.SetCookieOverride("token", "fresh-value") // 请求级覆盖 jar 中的同名 cookie
 ```
 
@@ -205,6 +209,11 @@ defer g.Close()
 poolReq, _ := g.NewRequest("GET", "https://example.com")
 ```
 
+配置了代理的池不会回退为直连。所有代理都在冷却时,`Acquire` 会等待其中一个恢复;所有
+代理都被永久移除后,它会一直等下去。用 `AcquireAsync(ctx)` 限定等待时间,`ctx` 结束时
+它会放弃等待。只有不含任何代理的池才会发放直连租约,其 `URL()` 为 `""`。调用
+`SessionPool.MarkBad(g)` 之后再关闭 `g`,其会话会被丢弃,而不是放回空闲池。
+
 ### 用户名/密码以外的代理凭据
 
 代理 URL 只能携带用户名和密码。`ProxyConfig` 还能设置静态 HTTP 凭据,以及承载它的请求头:
@@ -223,7 +232,7 @@ session, err := lkrequest.NewSessionBuilder(client).SetProxyConfig(proxy).Build(
 // 或放入代理池:lkrequest.NewProxyPoolBuilder().AddProxyConfig(proxy)
 ```
 
-`proxy.Identity()` 才是 `ProxyPool.MarkBad` 需要的键,代理 URL 不是。标记是异步生效的,`MarkBad` 返回后稍后才会落地。
+`proxy.Identity()` 才是 `ProxyPool.MarkBad` 需要的键,代理 URL 不是。`MarkBad` 返回时标记即已生效。
 
 ### MASQUE(实验性)
 
@@ -262,6 +271,15 @@ client, _ := lkrequest.NewClientBuilder().
 
 `RandomizeRecombine` / `RandomizeFull` 会合成非浏览器指纹(用于黑名单类目标),需要用
 `synthetic-fp` feature 构建的库,否则 `SetRandomize` 返回错误。
+
+单个请求可以覆盖其 HTTP/2 HEADERS 帧旧式优先级字段里的权重,用于浏览器给出的权重与
+preset 默认值不同的请求。它不改动 `priority` 请求头;HTTP/1.1 与 HTTP/3 会忽略它。
+
+```go
+resp, err := session.Get("https://example.com/").
+	SetH2PriorityWeight(21). // 线上值,0-255(即权重 22)
+	Send()
+```
 
 ### QUIC / HTTP3
 
@@ -342,7 +360,7 @@ go build -tags lkcgo ./lkrequest/...  # cgo
 | 顶层辅助函数 | `Get`、`PostJSON`、`NewClient`、`NewDefaultClient`、`NewSession`、`NewRequest`、`NewMultipart`、`ParseProxyConfig`、`NewMasqueConfig` |
 | HTTP 动词 | `Session.Get` / `Post` / `Put` / `Delete` / `Head` / `Patch` / `Options` / `Request` —— `SessionPoolGuard` 同样具备 |
 | 构造器 | `NewClientBuilder`、`NewSessionBuilder`、`NewProxyPoolBuilder`、`NewSessionPoolBuilder` |
-| 核心类型 | `Client`、`Session`、`Request`、`Response`、`StreamingResponse`、`ProxyPool`、`SessionPool`、`ProxyConfig`、`MasqueConfig`、`Multipart`、`Cookie`、`Redirect` |
+| 核心类型 | `Client`、`Session`、`Request`、`Response`、`StreamingResponse`、`ProxyPool`、`SessionPool`、`ProxyConfig`、`MasqueConfig`、`Multipart`、`Cookie`、`CookieInfo`、`Redirect` |
 | 内省 | `ABIVersion`、`LibraryVersion`、`FeatureSupported`、`ListPresetsJSON`、`GetPresetDetailJSON` |
 | 日志 | `InitLog`、`InitLogCallback` |
 | 枚举 | `RandomizeMode`、`FingerprintLayers`、`AcceptEncoding`、`RotationStrategy`、`HttpVersion`、`PreferredHTTPVersion`、`DnsConfig`、`LogLevel`、`ProxyAuthHeader` |
@@ -353,5 +371,5 @@ go build -tags lkcgo ./lkrequest/...  # cgo
 
 - `Client` 和 `Session` 可安全地跨 goroutine 共享;`Request` 发送即失效(复用请用 `Clone()`)。
 - `StreamingResponse` 实现了 `io.ReadCloser`。
-- `ClientBuilder.Build()` **不再**隐式套用 Chrome 头顺序预设;需要特定顺序时请设置指纹,或调用 `AddHeaderOrder` / `AddCookieOrder`。
-- QUIC/H3、自定义 DNS 解析器、SOCKS5 UDP 探测、协议版本偏好/协商、`ProxyConfig` / `MasqueConfig`、以及合成档 `SetRandomize` 需要库导出对应符号。在较旧的内嵌库上调用会返回 `lk: ... not supported by the loaded lkrequest library` 错误(构造器会延迟到 `Build()` 报告);包本身仍能正常加载。
+- 未调用 `SetPreset` 的 `ClientBuilder`(以及 `NewDefaultClient()`)使用库的默认预设 —— 目前是 `chrome_155`,头顺序也随之生效。需要其他指纹时调用 `SetPreset`,需要固定顺序时调用 `AddHeaderOrder` / `AddCookieOrder`。
+- QUIC/H3、自定义 DNS 解析器、SOCKS5 UDP 探测、协议版本偏好/协商、`ProxyConfig` / `MasqueConfig`、cookie 属性读取、请求级 H2 优先级权重、以及合成档 `SetRandomize` 需要库导出对应符号。在较旧的内嵌库上调用会返回 `lk: ... not supported by the loaded lkrequest library` 错误(构造器会延迟到 `Build()` 报告);包本身仍能正常加载。

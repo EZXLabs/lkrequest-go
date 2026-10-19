@@ -337,13 +337,46 @@ type CookieAttrs struct {
 // Cookie is a name/value pair, either from a response Set-Cookie header or
 // from a session cookie jar.
 //
-// This is deliberately not net/http.Cookie: the FFI layer only exposes the
+// This is deliberately not net/http.Cookie: these sources only report the
 // name and the value, so every other attribute field would be permanently
 // zero and read as "not set" rather than "not reported by the library". The
-// JSON tags match the payload of lk_session_get_cookies_json.
+// JSON tags match the payload of lk_session_get_cookies_json. For a session
+// cookie's attributes, see CookieInfo.
 type Cookie struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
+}
+
+// CookieInfo is a cookie from a session jar together with the attributes that
+// decide when it is sent, as returned by Session.GetCookiesWithAttrs and
+// Session.GetAllCookies. Two cookies sharing a name at different paths are two
+// entries here, told apart by Path. The JSON tags match the library payload.
+type CookieInfo struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+	// Domain is the domain the cookie is scoped to, or "" if the library
+	// reports none.
+	Domain string `json:"domain"`
+	// HostOnly is true when the cookie matches Domain exactly because the
+	// Set-Cookie carried no Domain attribute, and false when subdomains match.
+	HostOnly bool `json:"host_only"`
+	// Path is the Path attribute, or the default path derived from the request
+	// URL when the server sent none.
+	Path     string `json:"path"`
+	Secure   bool   `json:"secure"`
+	HTTPOnly bool   `json:"http_only"`
+	// SameSite is "Strict", "Lax" or "None", or "" when the cookie carries no
+	// SameSite attribute.
+	SameSite string `json:"same_site"`
+	// ExpiresUnix is the expiry in Unix seconds, or nil for a session cookie —
+	// one with neither Expires nor Max-Age, dropped when the session ends.
+	ExpiresUnix *int64 `json:"expires_unix"`
+}
+
+// IsPersistent reports whether the cookie has an expiry and so should survive
+// a restart, as opposed to a session cookie.
+func (c CookieInfo) IsPersistent() bool {
+	return c.ExpiresUnix != nil
 }
 
 // Redirect is one hop of a response redirect chain.

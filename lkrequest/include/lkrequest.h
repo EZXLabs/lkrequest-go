@@ -2,8 +2,11 @@
  * Threading / lifetime notes:
  * - Client / Session / Op handles may be shared across threads.
  * - Request / StreamingResponse are single-owner handles and must not be driven concurrently.
- * - Borrowed pointers returned by getters remain valid until the owning handle is freed, or until
- *   the next mutating stream read for lk_streaming_response_t chunk views.
+ * - Borrowed pointers are owned by their handle. Except for cookie and streaming chunk views,
+ *   they remain valid until that handle is freed.
+ * - Streaming chunk views are invalidated by the next mutating stream read, close, or free.
+ * - Session cookie views are invalidated when their query is repeated or a cookie setter,
+ *   removal, or clear runs. Copy them before such calls and synchronize reads with those calls.
  * - All handles must be released with their matching free function.
  */
 
@@ -26,6 +29,7 @@ typedef struct lk_response_t lk_response_t;
 typedef struct lk_streaming_response_t lk_streaming_response_t;
 typedef struct lk_error_t lk_error_t;
 typedef struct lk_op_t lk_op_t;
+typedef struct lk_proxy_config_t lk_proxy_config_t;
 typedef struct lk_proxy_pool_t lk_proxy_pool_t;
 typedef struct lk_proxy_pool_builder_t lk_proxy_pool_builder_t;
 typedef struct lk_proxy_guard_t lk_proxy_guard_t;
@@ -34,6 +38,7 @@ typedef struct lk_session_pool_t lk_session_pool_t;
 typedef struct lk_session_pool_builder_t lk_session_pool_builder_t;
 typedef struct lk_session_pool_guard_t lk_session_pool_guard_t;
 typedef struct lk_multipart_t lk_multipart_t;
+typedef struct lk_masque_config_t lk_masque_config_t;
 
 typedef struct lk_bytes_view_t {
   const uint8_t* ptr;
@@ -406,17 +411,6 @@ typedef struct lk_dns_resolver_t {
 } lk_dns_resolver_t;
 
 /**
- * MASQUE outer-connection settings (`lk_masque_config_*`).
- *
- * The type exists in every build so the generated header does not change
- * shape with the `masque` feature; without that feature
- * `lk_masque_config_new` refuses to produce one.
- */
-typedef struct lk_masque_config_t {
-  uint8_t _private[0];
-} lk_masque_config_t;
-
-/**
  * C-style callback sink for forwarding logs into the host language.
  */
 typedef void (*lk_log_callback_t)(void *context,
@@ -459,10 +453,6 @@ typedef struct lk_chunk_view_t {
   size_t len;
   bool is_final;
 } lk_chunk_view_t;
-
-typedef struct lk_proxy_config_t {
-  uint8_t _private[0];
-} lk_proxy_config_t;
 
 /**
  * C-style proxy provider used by ProxyPool / SessionPool builders.
@@ -634,7 +624,7 @@ lk_status_t lk_client_builder_set_keylog_file(lk_client_builder_t *builder,
  * Returns `LK_ERR` without the `masque` feature; see `lk_masque_config_new`.
  */
 lk_status_t lk_client_builder_set_masque_config(lk_client_builder_t *builder,
-                                                const struct lk_masque_config_t *config);
+                                                const lk_masque_config_t *config);
 
 lk_status_t lk_client_builder_set_max_connections_per_session(lk_client_builder_t *builder,
                                                               size_t max_connections);
@@ -756,7 +746,7 @@ lk_status_t lk_log_init_callback(lk_log_callback_t callback, void *context, int3
  * `lk_masque_config_add_ca_certs_pem` if you want the input validated up
  * front.
  */
-lk_status_t lk_masque_config_add_ca_cert_der(struct lk_masque_config_t *config,
+lk_status_t lk_masque_config_add_ca_cert_der(lk_masque_config_t *config,
                                              const uint8_t *der_ptr,
                                              size_t der_len);
 
@@ -780,7 +770,7 @@ lk_status_t lk_masque_config_add_ca_cert_der(struct lk_masque_config_t *config,
  *
  * Note this takes the PEM *bytes*, not a path.
  */
-lk_status_t lk_masque_config_add_ca_certs_pem(struct lk_masque_config_t *config,
+lk_status_t lk_masque_config_add_ca_certs_pem(lk_masque_config_t *config,
                                               const char *pem_ptr,
                                               size_t pem_len,
                                               size_t *out_added);
@@ -791,7 +781,7 @@ lk_status_t lk_masque_config_add_ca_certs_pem(struct lk_masque_config_t *config,
  * Consumers copy the settings, so freeing this after handing it to a client or
  * pool builder is correct — and required.
  */
-void lk_masque_config_free(struct lk_masque_config_t *config);
+void lk_masque_config_free(lk_masque_config_t *config);
 
 /**
  * Create MASQUE outer-connection settings at their defaults.
@@ -805,7 +795,7 @@ void lk_masque_config_free(struct lk_masque_config_t *config);
  * `lk_masque_config_free`. Returns `LK_ERR` and leaves `out_config` null if
  * this library was built without the `masque` feature.
  */
-lk_status_t lk_masque_config_new(struct lk_masque_config_t **out_config);
+lk_status_t lk_masque_config_new(lk_masque_config_t **out_config);
 
 /**
  * Cap the tunnels one outer MASQUE connection carries, shedding the least
@@ -815,7 +805,7 @@ lk_status_t lk_masque_config_new(struct lk_masque_config_t **out_config);
  * growth: the proxy holds a UDP socket per tunnel, so a session visiting
  * thousands of origins would otherwise pin thousands of them.
  */
-lk_status_t lk_masque_config_set_max_idle_tunnels(struct lk_masque_config_t *config, size_t max);
+lk_status_t lk_masque_config_set_max_idle_tunnels(lk_masque_config_t *config, size_t max);
 
 /**
  * Override the SNI and the certificate name checked on the hop to the MASQUE
@@ -828,7 +818,7 @@ lk_status_t lk_masque_config_set_max_idle_tunnels(struct lk_masque_config_t *con
  * This changes the name the certificate must *cover*; it does not weaken the
  * check.
  */
-lk_status_t lk_masque_config_set_server_name(struct lk_masque_config_t *config,
+lk_status_t lk_masque_config_set_server_name(lk_masque_config_t *config,
                                              const char *name_ptr,
                                              size_t name_len);
 
@@ -843,7 +833,7 @@ lk_status_t lk_masque_config_set_server_name(struct lk_masque_config_t *config,
  * `lk_masque_config_set_max_idle_tunnels` is then the only thing bounding
  * growth.
  */
-lk_status_t lk_masque_config_set_tunnel_idle_timeout(struct lk_masque_config_t *config,
+lk_status_t lk_masque_config_set_tunnel_idle_timeout(lk_masque_config_t *config,
                                                      uint64_t timeout_ms);
 
 /**
@@ -858,7 +848,7 @@ lk_status_t lk_masque_config_set_tunnel_idle_timeout(struct lk_masque_config_t *
  * built — there would be nothing left to verify against — rather than
  * silently accepting anything.
  */
-lk_status_t lk_masque_config_set_use_native_certs(struct lk_masque_config_t *config, bool enabled);
+lk_status_t lk_masque_config_set_use_native_certs(lk_masque_config_t *config, bool enabled);
 
 /**
  * Verify the MASQUE proxy's TLS certificate. **Default: enabled.**
@@ -880,7 +870,7 @@ lk_status_t lk_masque_config_set_use_native_certs(struct lk_masque_config_t *con
  * to the origin. Neither implies the other, so disabling verification while
  * debugging one hop never silently disarms the other.
  */
-lk_status_t lk_masque_config_set_verify(struct lk_masque_config_t *config, bool enabled);
+lk_status_t lk_masque_config_set_verify(lk_masque_config_t *config, bool enabled);
 
 /**
  * Write the process-global telemetry snapshot into `out`.
@@ -948,14 +938,14 @@ lk_status_t lk_preset_list_json(const char **out_json_ptr);
 /**
  * Free a proxy configuration handle.
  */
-void lk_proxy_config_free(struct lk_proxy_config_t *config);
+void lk_proxy_config_free(lk_proxy_config_t *config);
 
 /**
  * Borrow this proxy's identity — the key used for cooldown and blacklisting.
  *
  * Opaque; never contains passwords or encoded credentials.
  */
-lk_status_t lk_proxy_config_identity(const struct lk_proxy_config_t *config,
+lk_status_t lk_proxy_config_identity(const lk_proxy_config_t *config,
                                      const char **out_ptr,
                                      size_t *out_len);
 
@@ -972,13 +962,13 @@ lk_status_t lk_proxy_config_identity(const struct lk_proxy_config_t *config,
  */
 lk_status_t lk_proxy_config_parse(const char *url_ptr,
                                   size_t url_len,
-                                  struct lk_proxy_config_t **out_config);
+                                  lk_proxy_config_t **out_config);
 
 /**
  * Select which header carries HTTP-based credentials
  * (`Proxy-Authorization` by default).
  */
-lk_status_t lk_proxy_config_set_auth_header(struct lk_proxy_config_t *config,
+lk_status_t lk_proxy_config_set_auth_header(lk_proxy_config_t *config,
                                             lk_proxy_auth_header_t header);
 
 /**
@@ -988,7 +978,7 @@ lk_status_t lk_proxy_config_set_auth_header(struct lk_proxy_config_t *config,
  * Fails with `LK_ERR_INVALID_CONFIG` when this proxy is SOCKS5: the SOCKS5
  * handshake has no request headers to carry the credential.
  */
-lk_status_t lk_proxy_config_set_http_auth(struct lk_proxy_config_t *config,
+lk_status_t lk_proxy_config_set_http_auth(lk_proxy_config_t *config,
                                           const char *scheme_ptr,
                                           size_t scheme_len,
                                           const char *credentials_ptr,
@@ -997,7 +987,7 @@ lk_status_t lk_proxy_config_set_http_auth(struct lk_proxy_config_t *config,
 /**
  * Replace this proxy's credentials with a username/password pair.
  */
-lk_status_t lk_proxy_config_set_user_pass(struct lk_proxy_config_t *config,
+lk_status_t lk_proxy_config_set_user_pass(lk_proxy_config_t *config,
                                           const char *username_ptr,
                                           size_t username_len,
                                           const char *password_ptr,
@@ -1009,7 +999,7 @@ lk_status_t lk_proxy_config_set_user_pass(struct lk_proxy_config_t *config,
  * The pointer stays valid until the handle is mutated or freed. Credentials
  * set with `lk_proxy_config_set_http_auth` have no URL form and do not appear.
  */
-lk_status_t lk_proxy_config_url(const struct lk_proxy_config_t *config,
+lk_status_t lk_proxy_config_url(const lk_proxy_config_t *config,
                                 const char **out_ptr,
                                 size_t *out_len);
 
@@ -1049,7 +1039,7 @@ lk_status_t lk_proxy_pool_builder_add_proxy(lk_proxy_pool_builder_t *builder,
  * The configuration is copied; the caller keeps ownership of `config`.
  */
 lk_status_t lk_proxy_pool_builder_add_proxy_config(lk_proxy_pool_builder_t *builder,
-                                                   const struct lk_proxy_config_t *config);
+                                                   const lk_proxy_config_t *config);
 
 lk_status_t lk_proxy_pool_builder_build(lk_proxy_pool_builder_t *builder,
                                         lk_proxy_pool_t **out_pool,
@@ -1100,7 +1090,7 @@ lk_status_t lk_proxy_pool_builder_set_health_check(lk_proxy_pool_builder_t *buil
  * CONNECT-UDP client to probe with.
  */
 lk_status_t lk_proxy_pool_builder_set_masque_tunnel_probe(lk_proxy_pool_builder_t *builder,
-                                                          const struct lk_masque_config_t *config);
+                                                          const lk_masque_config_t *config);
 
 lk_status_t lk_proxy_pool_builder_set_max_proxies(lk_proxy_pool_builder_t *builder, size_t n);
 
@@ -1202,6 +1192,12 @@ lk_status_t lk_request_set_cookie_override(lk_request_t *request,
 lk_status_t lk_request_set_form(lk_request_t *request,
                                 const struct lk_form_pair_t *pairs_ptr,
                                 size_t pairs_count);
+
+/**
+ * Set raw legacy H2 HEADERS weight (0..255), independently of HTTP priority.
+ * Does not enable legacy priority for profiles that omit it; ignored on H1/H3.
+ */
+lk_status_t lk_request_set_h2_priority_weight(lk_request_t *request, uint32_t weight);
 
 lk_status_t lk_request_set_json_text(lk_request_t *request, const char *json_ptr, size_t json_len);
 
@@ -1366,7 +1362,7 @@ lk_status_t lk_session_builder_set_proxy(lk_session_builder_t *builder,
  * copied; the caller keeps ownership of `config` and must still free it.
  */
 lk_status_t lk_session_builder_set_proxy_config(lk_session_builder_t *builder,
-                                                const struct lk_proxy_config_t *config);
+                                                const lk_proxy_config_t *config);
 
 lk_status_t lk_session_builder_set_retry_exponential(lk_session_builder_t *builder,
                                                      uint32_t max_retries,
@@ -1393,6 +1389,22 @@ lk_status_t lk_session_connection_pool_stats(const lk_session_t *session,
 
 void lk_session_free(lk_session_t *session);
 
+/**
+ * Return every unexpired cookie in the session across all domains and paths.
+ * Includes HttpOnly and Secure cookies, ordered by creation time (oldest first).
+ * The JSON array has the same fields as lk_session_get_cookies_with_attrs_json.
+ *
+ * Both output parameters are required. The borrowed JSON is NUL-terminated;
+ * out_json_len excludes the terminator. Its buffer is invalidated by another
+ * call to this getter, a cookie setter/removal/clear, or freeing the session.
+ * Synchronize those operations with reads of the buffer; do not free it.
+ * On failure, provided outputs are reset to NULL/0. out_err is optional.
+ */
+lk_status_t lk_session_get_all_cookies_json(const lk_session_t *session,
+                                            const char **out_json_ptr,
+                                            size_t *out_json_len,
+                                            lk_error_t **out_err);
+
 lk_status_t lk_session_get_cookie(const lk_session_t *session,
                                   const char *url_ptr,
                                   size_t url_len,
@@ -1406,6 +1418,26 @@ lk_status_t lk_session_get_cookies_json(const lk_session_t *session,
                                         const char *url_ptr,
                                         size_t url_len,
                                         const char **out_json_ptr);
+
+/**
+ * Return unexpired cookies matching the URL as a JSON array with attributes.
+ * Fields: name, value, domain, host_only, path, secure, http_only, same_site,
+ * expires_unix. Missing optional attributes are null; expiry is Unix seconds.
+ * Order is longest path first, then oldest creation first. Invalid URLs and
+ * URLs with no matching cookies return an empty array, as in the Rust API.
+ *
+ * Both output parameters are required. The borrowed JSON is NUL-terminated;
+ * out_json_len excludes the terminator. Its buffer is invalidated by repeating
+ * this query, a cookie setter/removal/clear, or freeing the session handle.
+ * Synchronize those operations with reads of the buffer; do not free it.
+ * On failure, provided outputs are reset to NULL/0. out_err is optional.
+ */
+lk_status_t lk_session_get_cookies_with_attrs_json(const lk_session_t *session,
+                                                   const char *url_ptr,
+                                                   size_t url_len,
+                                                   const char **out_json_ptr,
+                                                   size_t *out_json_len,
+                                                   lk_error_t **out_err);
 
 lk_status_t lk_session_new(const lk_client_t *client,
                            lk_session_t **out_session,
@@ -1492,7 +1524,7 @@ lk_status_t lk_session_pool_builder_set_idle_timeout(lk_session_pool_builder_t *
  * CONNECT-UDP client to probe with.
  */
 lk_status_t lk_session_pool_builder_set_masque_tunnel_probe(lk_session_pool_builder_t *builder,
-                                                            const struct lk_masque_config_t *config);
+                                                            const lk_masque_config_t *config);
 
 lk_status_t lk_session_pool_builder_set_max_sessions(lk_session_pool_builder_t *builder, size_t n);
 
