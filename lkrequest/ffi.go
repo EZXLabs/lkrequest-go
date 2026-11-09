@@ -354,3 +354,15 @@ var (
 var (
 	ffi_lk_request_set_h2_priority_weight func(request uintptr, weight uint32) int32
 )
+
+// Client builder HTTP/1.1 request header-name casing.
+var (
+	ffi_lk_client_builder_set_http1_title_case_headers func(builder uintptr, enabled uintptr) int32
+)
+
+// Trust Anchor Identifiers (TAI) negotiation.
+var (
+	ffi_lk_client_builder_set_trust_anchor_policy_json  func(builder uintptr, jsonPtr uintptr, jsonLen uintptr) int32
+	ffi_lk_client_builder_add_trust_anchor_binding_json func(builder uintptr, jsonPtr uintptr, jsonLen uintptr) int32
+	ffi_lk_trust_anchor_identity_from_der               func(derPtr uintptr, derLen uintptr, outHex uintptr, outHexCapacity uintptr) int32
+)

@@ -27,8 +27,8 @@ The package wraps the `lkrequest-ffi` C ABI behind a thin, idiomatic Go API:
 - **MASQUE proxies (experimental)** — QUIC tunneled through an RFC 9298 CONNECT-UDP proxy, with a private CA for the proxy hop; needs a `masque`-enabled library
 - **Connection prewarming** — `Preconnect` / `PreconnectAsync`
 - **Automatic decompression** — gzip / br / deflate / zstd, controllable via `AcceptEncoding`
-- **Certificate management** — custom CA, verify toggle, native certs, ECH, TLS keylog
-- **Header / cookie ordering** — configurable at client / session / request levels; cookies you do not order explicitly follow Chrome's own order
+- **Certificate management** — custom CA, verify toggle, native certs, ECH, TLS keylog, Trust Anchor Identifiers negotiation
+- **Header / cookie ordering** — configurable at client / session / request levels; cookies you do not order explicitly follow Chrome's own order; HTTP/1.1 header names in Title-Case or lowercase
 - **Custom DNS** — built-in DoH resolvers (Google / Cloudflare / Quad9) or a custom resolver callback
 - **SOCKS5 UDP relay probing** — detect UDP ASSOCIATE support for QUIC-over-SOCKS5
 - **Request diagnostics** — per-phase timings (DNS / TCP / TLS / TTFB) via `DiagnosticsJSON()`
@@ -134,6 +134,17 @@ client, err := lkrequest.NewClientBuilder().
 	SetTimeoutTotal(30000).             // milliseconds
 	SetMaxConnectionsPerSession(16).
 	SetFallbackH2ToH1(true).
+	Build()
+```
+
+HTTP/1.1 requests spell header names in Title-Case (`Content-Type`) by default.
+`SetHTTP1TitleCaseHeaders(false)` sends them in lowercase (`content-type`), default headers
+and generated ones such as `content-length` too; only `Host` stays capitalized. Either way
+the spelling given to `AddHeader` is not kept. HTTP/2 and HTTP/3 always send lowercase names.
+
+```go
+client, err := lkrequest.NewClientBuilder().
+	SetHTTP1TitleCaseHeaders(false). // HTTP/1.1 only
 	Build()
 ```
 
@@ -292,6 +303,43 @@ resp, err := session.Get("https://example.com/").
 	Send()
 ```
 
+### Trust Anchor Identifiers
+
+Chrome presets advertise trust anchor identifiers, IDs of the roots the client accepts, in the
+TLS `trust_anchors` extension (draft-ietf-tls-trust-anchor-ids). By default a client sends the
+list its preset carries, as the browser does, and does nothing more with it. `SetTrustAnchorPolicy`
+can instead send the IDs of the roots the client trusts, and let a request reconnect once when its
+handshake fails after the server named the roots it can serve. None of this changes which
+certificates are trusted.
+
+```go
+client, err := lkrequest.NewClientBuilder().
+	SetPreset("chrome_157").
+	SetTrustAnchorPolicy(lkrequest.TrustAnchorPolicy{
+		Advertisement: lkrequest.TrustAnchorAdvertiseTrusted,
+		Recovery:      lkrequest.TrustAnchorRecoveryOnce,
+	}).
+	Build()
+
+// A private root: trust it as usual, then bind the ID its deployment assigned.
+identity, err := lkrequest.TrustAnchorIdentity(rootDER)
+client, err = lkrequest.NewClientBuilder().
+	AddCACertMemory(rootDER).
+	AddTrustAnchorBinding(identity, "81fd5901").
+	Build()
+```
+
+- `Build()` reports, as `ErrInvalidConfig`, a policy it cannot honour. Recovery needs certificate
+  verification and cannot combine with `SetFallbackProxyToDirect`. Any policy but the zero value needs
+  a preset whose TLS profiles carry the extension (Chrome's do; Firefox's and Safari's do not), and
+  rules out synthetic TLS randomization. A binding must name a root the client trusts.
+- `DiagnosticsJSON()` of a response or an `LkError` carries a `trust_anchor` object for the TLS
+  connection the request opened: the requested and available IDs, `verified_anchor` (the
+  `TrustAnchorIdentity` of the root that verified the chain), `authenticated`, `recovered`, and the
+  failed first attempt as `previous_attempt`. It is `null` for a request on a pooled connection.
+- A recovery that fails too ends the request with an error that is not retryable. So does any
+  handshake failure after the server listed its trust anchors, with or without recovery.
+
 ### QUIC / HTTP3
 
 ```go
@@ -368,13 +416,13 @@ go build -tags lkcgo ./lkrequest/...  # cgo
 
 | Group | Symbols |
 |---|---|
-| Top-level helpers | `Get`, `PostJSON`, `NewClient`, `NewDefaultClient`, `NewSession`, `NewRequest`, `NewMultipart`, `ParseProxyConfig`, `NewMasqueConfig` |
+| Top-level helpers | `Get`, `PostJSON`, `NewClient`, `NewDefaultClient`, `NewSession`, `NewRequest`, `NewMultipart`, `ParseProxyConfig`, `NewMasqueConfig`, `TrustAnchorIdentity` |
 | HTTP verbs | `Session.Get` / `Post` / `Put` / `Delete` / `Head` / `Patch` / `Options` / `Request` — same set on `SessionPoolGuard` |
 | Builders | `NewClientBuilder`, `NewSessionBuilder`, `NewProxyPoolBuilder`, `NewSessionPoolBuilder` |
-| Core types | `Client`, `Session`, `Request`, `Response`, `StreamingResponse`, `ProxyPool`, `SessionPool`, `ProxyConfig`, `MasqueConfig`, `Multipart`, `Cookie`, `CookieInfo`, `Redirect` |
+| Core types | `Client`, `Session`, `Request`, `Response`, `StreamingResponse`, `ProxyPool`, `SessionPool`, `ProxyConfig`, `MasqueConfig`, `Multipart`, `Cookie`, `CookieInfo`, `Redirect`, `TrustAnchorPolicy` |
 | Introspection | `ABIVersion`, `LibraryVersion`, `FeatureSupported`, `ListPresetsJSON`, `GetPresetDetailJSON` |
 | Logging | `InitLog`, `InitLogCallback` |
-| Enums | `RandomizeMode`, `FingerprintLayers`, `AcceptEncoding`, `RotationStrategy`, `HttpVersion`, `PreferredHTTPVersion`, `DnsConfig`, `LogLevel`, `ProxyAuthHeader` |
+| Enums | `RandomizeMode`, `FingerprintLayers`, `AcceptEncoding`, `RotationStrategy`, `HttpVersion`, `PreferredHTTPVersion`, `DnsConfig`, `LogLevel`, `ProxyAuthHeader`, `TrustAnchorAdvertisement`, `TrustAnchorRecovery` |
 
 Full API docs: `go doc github.com/EZXLabs/lkrequest-go/lkrequest`.
 
@@ -383,4 +431,4 @@ Full API docs: `go doc github.com/EZXLabs/lkrequest-go/lkrequest`.
 - `Client` and `Session` are safe to share across goroutines; `Request` is consume-on-send (reuse via `Clone()`).
 - `StreamingResponse` implements `io.ReadCloser`.
 - A `ClientBuilder` built without `SetPreset`, like `NewDefaultClient()`, uses the library's default preset — currently `chrome_155` — header order included. Call `SetPreset` for another fingerprint, or `AddHeaderOrder` / `AddCookieOrder` to pin a specific order.
-- QUIC/H3, custom DNS resolver, SOCKS5 UDP probe, preferred/negotiated HTTP version, `ProxyConfig` / `MasqueConfig`, cookie attribute readers, the per-request H2 priority weight, and synthetic `SetRandomize` tiers require a library that exports the corresponding symbols. Against an older embedded library these return an `lk: ... not supported by the loaded lkrequest library` error (builders defer it to `Build()`); the package still loads normally.
+- QUIC/H3, custom DNS resolver, SOCKS5 UDP probe, preferred/negotiated HTTP version, `ProxyConfig` / `MasqueConfig`, cookie attribute readers, the per-request H2 priority weight, HTTP/1.1 header casing, Trust Anchor Identifiers, and synthetic `SetRandomize` tiers require a library that exports the corresponding symbols. Against an older embedded library these return an `lk: ... not supported by the loaded lkrequest library` error (builders defer it to `Build()`); the package still loads normally.

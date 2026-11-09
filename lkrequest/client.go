@@ -589,6 +589,28 @@ func (b *ClientBuilder) SetRandomize(mode RandomizeMode, layers FingerprintLayer
 	)
 }
 
+// SetHTTP1TitleCaseHeaders chooses how HTTP/1.1 requests spell header names.
+// The default, true, sends Title-Case names such as "Content-Type". False
+// sends every name in lowercase, such as "content-type", except Host, which
+// stays capitalized. Either way the casing applies to every header, default
+// headers and generated ones such as Content-Length included, and the spelling
+// passed to AddDefaultHeader or Request.AddHeader is not kept. It covers
+// requests on new, reused and preconnected connections, buffered and
+// streaming alike; HTTP/2 and HTTP/3 always send lowercase names. Requires a
+// library exporting lk_client_builder_set_http1_title_case_headers.
+func (b *ClientBuilder) SetHTTP1TitleCaseHeaders(enabled bool) *ClientBuilder {
+	if !b.check() {
+		return b
+	}
+	if ffi_lk_client_builder_set_http1_title_case_headers == nil {
+		return b.setUnsupported("client builder set http1 title case headers")
+	}
+	return b.setStatus(
+		ffi_lk_client_builder_set_http1_title_case_headers(b.ptr, boolToUintptr(enabled)),
+		"client builder set http1 title case headers",
+	)
+}
+
 func (b *ClientBuilder) Build() (*Client, error) {
 	if b == nil {
 		return nil, ErrNilHandle

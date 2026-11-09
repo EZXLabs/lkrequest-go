@@ -563,6 +563,13 @@ lk_status_t lk_client_builder_add_header_order(lk_client_builder_t *builder,
                                                const char *name_ptr,
                                                size_t name_len);
 
+/**
+ * Add metadata for an already trusted root: {"anchor_identity":"...","id":"d6790901"}.
+ */
+lk_status_t lk_client_builder_add_trust_anchor_binding_json(lk_client_builder_t *builder,
+                                                            const char *json_ptr,
+                                                            size_t json_len);
+
 lk_status_t lk_client_builder_build(lk_client_builder_t *builder,
                                     lk_client_t **out_client,
                                     lk_error_t **out_err);
@@ -599,6 +606,14 @@ lk_status_t lk_client_builder_set_fallback_proxy_to_direct(lk_client_builder_t *
                                                            bool enabled);
 
 lk_status_t lk_client_builder_set_h2_preset(lk_client_builder_t *builder, const char *preset_name);
+
+/**
+ * Choose HTTP/1.1 request header casing. Defaults to true (Title-Case).
+ * False sends lowercase names except `Host`, including auto-generated headers
+ * and WebSocket upgrades. Does not preserve caller spelling or affect HTTP/2 or HTTP/3.
+ */
+lk_status_t lk_client_builder_set_http1_title_case_headers(lk_client_builder_t *builder,
+                                                           bool enabled);
 
 lk_status_t lk_client_builder_set_keylog_file(lk_client_builder_t *builder,
                                               const char *path_ptr,
@@ -687,6 +702,14 @@ lk_status_t lk_client_builder_set_timeout_tls_handshake(lk_client_builder_t *bui
 lk_status_t lk_client_builder_set_timeout_total(lk_client_builder_t *builder, uint64_t timeout_ms);
 
 lk_status_t lk_client_builder_set_timeout_ttfb(lk_client_builder_t *builder, uint64_t timeout_ms);
+
+/**
+ * Configure TAI advertisement and recovery. JSON example:
+ * {"advertisement":"profile","recovery":"once"}.
+ */
+lk_status_t lk_client_builder_set_trust_anchor_policy_json(lk_client_builder_t *builder,
+                                                           const char *json_ptr,
+                                                           size_t json_len);
 
 lk_status_t lk_client_builder_set_use_native_certs(lk_client_builder_t *builder, bool enabled);
 
@@ -1683,6 +1706,15 @@ lk_status_t lk_streaming_response_header_value_at(const lk_streaming_response_t 
                                                   size_t *out_len);
 
 uint16_t lk_streaming_response_status(const lk_streaming_response_t *stream);
+
+/**
+ * Compute an anchor identity from a DER certificate without adding trust.
+ * `out_hex` must point to at least 65 writable bytes, including the NUL terminator.
+ */
+lk_status_t lk_trust_anchor_identity_from_der(const uint8_t *der_ptr,
+                                              size_t der_len,
+                                              char *out_hex,
+                                              size_t out_hex_capacity);
 
 #ifdef __cplusplus
 }  // extern "C"

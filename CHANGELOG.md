@@ -2,6 +2,42 @@
 
 All important changes to this project will be documented in this file.
 
+## lkrequest-go 0.2.5
+
+Updates the bundled `lkrequest-ffi` native engine, adds the Chrome 156 and
+Chrome 157 presets, lets HTTP/1.1 requests send their header names in
+lowercase, and negotiates Trust Anchor Identifiers. All of it is new API — the
+native surface grew by four symbols and changed none — and none of it changes
+anything until you opt in: the default preset stays Chrome 155, HTTP/1.1
+header names stay Title-Case, and a client sends the trust anchor identifiers
+its preset carries and does nothing more with them.
+
+Four upstream changes do reach code you have already written, all at the TLS
+handshake: the default `chrome_155` preset sends its trust anchor identifiers
+in one sorted order instead of shuffling them, a handshake that fails after
+the server listed its trust anchors is no longer retryable, TLS 1.3
+Certificate messages are parsed more strictly, and the bundled roots no longer
+include the root of the distrusted emSign intermediates. See Behaviour
+Changes.
+
+### 🚀 Features
+
+- **Chrome 156 Preset** — `SetPreset("chrome_156")` / `NewClient("chrome_156")`, captured from Chrome 156.0.8078.48 (Windows, October 2026). Every layer matches Chrome 155: TCP TLS with its 28 trust-anchor identifiers, HTTP/2, QUIC TLS, QUIC transport parameters, Initial packetization, and HTTP/3 SETTINGS and request priorities; it also keeps Chrome 155's QUIC behaviour. Header values stay yours to set, so pair it with the `Chrome/156` User-Agent and `sec-ch-ua` that go with it. The default preset remains `chrome_155`.
+- **HTTP/1.1 Header-Name Casing** — `ClientBuilder.SetHTTP1TitleCaseHeaders(false)` sends HTTP/1.1 header names in lowercase (`content-type`) instead of the default Title-Case (`Content-Type`); `Host` stays capitalized. It covers every header, default headers and generated ones such as `content-length` included, on new, reused and preconnected connections, buffered and streaming alike. Header values and request bodies go out unchanged, and in neither mode is the spelling given to `AddHeader` kept. HTTP/2 and HTTP/3 always send lowercase names, so it changes nothing there.
+- **Chrome 157 Preset** — `SetPreset("chrome_157")` / `NewClient("chrome_157")`, captured from Chrome 157.0.8103.39 (Windows, November 2026). Every layer matches Chrome 156, its 28 trust-anchor identifiers and the one sorted order they go out in included. Header values stay yours to set, so pair it with the `Chrome/157` User-Agent and `sec-ch-ua` that go with it. The default preset remains `chrome_155`.
+- **Trust Anchor Identifiers** — Chrome presets advertise the IDs of the roots a client accepts in the TLS `trust_anchors` extension (draft-ietf-tls-trust-anchor-ids); a client can now negotiate them, over TCP and, with a QUIC/H3-capable library, QUIC. `ClientBuilder.SetTrustAnchorPolicy(TrustAnchorPolicy{...})` chooses what to advertise, the preset's list (`TrustAnchorAdvertiseProfile`, the default) or the sorted IDs of the roots the client trusts (`TrustAnchorAdvertiseTrusted`), and whether a request may reconnect once (`TrustAnchorRecoveryOnce`) when its handshake fails after the server listed the roots it can serve, asking then for the first of them the client trusts. `AddTrustAnchorBinding(anchorIdentity, id)` binds an ID to a root the client trusts, named by `TrustAnchorIdentity(certDER)`; the built-in roots come with theirs. None of it changes which certificates are trusted. `Build()` reports, as `ErrInvalidConfig`, what it cannot honour: recovery without certificate verification or together with `SetFallbackProxyToDirect`, any policy but the default on a preset without the extension (Firefox, Safari) or with synthetic TLS randomization, and a binding to a root the client does not trust. `DiagnosticsJSON()` of a response or an `LkError` now carries a `trust_anchor` object for the TLS connection the request opened: the requested and available IDs, the identity of the root that verified the chain and, after a recovery, the failed first attempt. It is `null` for a request on a pooled connection.
+
+### 🐞 Fixes
+
+- **Native Dependency Updates** — the native engine moves to rustls-webpki 0.103.16, Tokio 1.53.3 and zstd 0.13.4 (zstd-safe 7.4.0, zstd-sys 2.1.2), which clears the RustSec advisories upstream's audit reported against the versions it used. No API change; the bundled roots, updated along with them, are covered under Behaviour Changes.
+
+### ⚠️ Behaviour Changes
+
+- **Chrome 155 Sends Its Trust Anchor Identifiers in One Sorted Order** — visible on the wire, and `chrome_155` is the default preset. Its 28 trust-anchor identifiers used to go out shuffled anew for every ClientHello; they now go out, over TCP and QUIC, in the one sorted order Chrome 155 itself sends them in, as its source and captures show. The identifiers themselves are unchanged, the ClientHello's extensions are still permuted for every handshake, and `chrome_152` to `chrome_154` keep shuffling theirs.
+- **Handshake Failures After a Server Lists Its Trust Anchors Are Not Retried** — when a server answers the `trust_anchors` extension with the identifiers it can serve and the handshake then fails, `LkError.IsRetryable()` is now false and automatic retries stop, whether recovery is on or not, unless ECH was rejected. Error codes and messages are unchanged, and servers that do not negotiate trust anchors are not affected.
+- **Stricter TLS 1.3 Certificate Handling** — a server Certificate message with trailing bytes, a zero-length certificate, or a certificate entry whose extensions are missing, truncated or repeated now fails the handshake, as does an empty or malformed list of trust anchors in its EncryptedExtensions, which used to be ignored. A certificate that both names another host and chains to no trusted root is now reported for the name rather than the chain.
+- **The Root of the Distrusted emSign Intermediates Is No Longer Bundled** — the bundled Mozilla roots move to webpki-roots 1.0.10, which drops `emSign ECC Root CA - G3`, so a chain through the emSign intermediates under it no longer verifies against the bundled roots. To keep trusting it, add it yourself with `AddCACertFile` / `AddCACertMemory`, or use `SetUseNativeCerts(true)` on a system that still trusts it.
+
 ## lkrequest-go 0.2.4
 
 Updates the bundled `lkrequest-ffi` native engine, adds the Chrome 155 preset

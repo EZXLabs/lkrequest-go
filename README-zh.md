@@ -26,8 +26,8 @@
 - **MASQUE 代理(实验性)** —— 经 RFC 9298 CONNECT-UDP 代理隧道承载 QUIC,代理一跳可使用私有 CA;需要启用 `masque` 的库
 - **连接预热** —— `Preconnect` / `PreconnectAsync`
 - **自动解压** —— gzip / br / deflate / zstd,可通过 `AcceptEncoding` 控制
-- **证书管理** —— 自定义 CA、校验开关、系统证书、ECH、TLS keylog
-- **Header / Cookie 顺序** —— 可在客户端 / 会话 / 请求三层配置;未显式排序的 Cookie 按 Chrome 自身的顺序发送
+- **证书管理** —— 自定义 CA、校验开关、系统证书、ECH、TLS keylog、信任锚标识(TAI)协商
+- **Header / Cookie 顺序** —— 可在客户端 / 会话 / 请求三层配置;未显式排序的 Cookie 按 Chrome 自身的顺序发送;HTTP/1.1 头名可选 Title-Case 或小写
 - **自定义 DNS** —— 内置 DoH 解析器(Google / Cloudflare / Quad9)或自定义解析回调
 - **SOCKS5 UDP 中继探测** —— 检测 QUIC-over-SOCKS5 所需的 UDP ASSOCIATE 支持
 - **请求诊断** —— 通过 `DiagnosticsJSON()` 获取分阶段耗时(DNS / TCP / TLS / TTFB)
@@ -132,6 +132,16 @@ client, err := lkrequest.NewClientBuilder().
 	SetTimeoutTotal(30000).             // 毫秒
 	SetMaxConnectionsPerSession(16).
 	SetFallbackH2ToH1(true).
+	Build()
+```
+
+HTTP/1.1 请求的头名默认为 Title-Case(`Content-Type`)。`SetHTTP1TitleCaseHeaders(false)` 改为小写
+(`content-type`),`Host` 除外;默认头和 `content-length` 等自动生成的头同样适用。两种模式都不保留
+`AddHeader` 传入的原始拼写。HTTP/2 与 HTTP/3 始终使用小写头名。
+
+```go
+client, err := lkrequest.NewClientBuilder().
+	SetHTTP1TitleCaseHeaders(false). // 仅影响 HTTP/1.1
 	Build()
 ```
 
@@ -281,6 +291,39 @@ resp, err := session.Get("https://example.com/").
 	Send()
 ```
 
+### 信任锚标识(Trust Anchor Identifiers)
+
+Chrome 预设会在 TLS `trust_anchors` 扩展(draft-ietf-tls-trust-anchor-ids)里声明信任锚标识,即客户端
+接受的根证书的 ID。默认情况下,客户端像浏览器一样发送预设自带的列表,此外不做任何处理。
+`SetTrustAnchorPolicy` 可以改为发送客户端已信任的根所对应的 ID,并在服务端列出它能提供的根之后、握手
+仍失败时,让请求重连一次。这些都不会改变信任哪些证书。
+
+```go
+client, err := lkrequest.NewClientBuilder().
+	SetPreset("chrome_157").
+	SetTrustAnchorPolicy(lkrequest.TrustAnchorPolicy{
+		Advertisement: lkrequest.TrustAnchorAdvertiseTrusted,
+		Recovery:      lkrequest.TrustAnchorRecoveryOnce,
+	}).
+	Build()
+
+// 私有根:照常信任它,再绑定其部署方分配的 ID。
+identity, err := lkrequest.TrustAnchorIdentity(rootDER)
+client, err = lkrequest.NewClientBuilder().
+	AddCACertMemory(rootDER).
+	AddTrustAnchorBinding(identity, "81fd5901").
+	Build()
+```
+
+- 无法满足的策略由 `Build()` 以 `ErrInvalidConfig` 报告:重连需要开启证书校验,且不能与
+  `SetFallbackProxyToDirect` 同时使用;零值以外的策略要求预设的 TLS profile 都带这个扩展(Chrome 带,
+  Firefox 与 Safari 不带),也不能使用合成 TLS 随机化;绑定的根必须是客户端已信任的根。
+- 响应或 `LkError` 的 `DiagnosticsJSON()` 里有 `trust_anchor` 对象,描述该请求新建的 TLS 连接:请求与
+  可用的 ID、`verified_anchor`(校验证书链所用根的 `TrustAnchorIdentity`)、`authenticated`、`recovered`,
+  以及失败的首次尝试 `previous_attempt`。复用连接池中连接的请求,该字段为 `null`。
+- 重连也失败时,请求以不可重试的错误结束。服务端列出其信任锚之后的任何握手失败同样不可重试,与是否开启
+  重连无关。
+
 ### QUIC / HTTP3
 
 ```go
@@ -357,13 +400,13 @@ go build -tags lkcgo ./lkrequest/...  # cgo
 
 | 分组 | 符号 |
 |---|---|
-| 顶层辅助函数 | `Get`、`PostJSON`、`NewClient`、`NewDefaultClient`、`NewSession`、`NewRequest`、`NewMultipart`、`ParseProxyConfig`、`NewMasqueConfig` |
+| 顶层辅助函数 | `Get`、`PostJSON`、`NewClient`、`NewDefaultClient`、`NewSession`、`NewRequest`、`NewMultipart`、`ParseProxyConfig`、`NewMasqueConfig`、`TrustAnchorIdentity` |
 | HTTP 动词 | `Session.Get` / `Post` / `Put` / `Delete` / `Head` / `Patch` / `Options` / `Request` —— `SessionPoolGuard` 同样具备 |
 | 构造器 | `NewClientBuilder`、`NewSessionBuilder`、`NewProxyPoolBuilder`、`NewSessionPoolBuilder` |
-| 核心类型 | `Client`、`Session`、`Request`、`Response`、`StreamingResponse`、`ProxyPool`、`SessionPool`、`ProxyConfig`、`MasqueConfig`、`Multipart`、`Cookie`、`CookieInfo`、`Redirect` |
+| 核心类型 | `Client`、`Session`、`Request`、`Response`、`StreamingResponse`、`ProxyPool`、`SessionPool`、`ProxyConfig`、`MasqueConfig`、`Multipart`、`Cookie`、`CookieInfo`、`Redirect`、`TrustAnchorPolicy` |
 | 内省 | `ABIVersion`、`LibraryVersion`、`FeatureSupported`、`ListPresetsJSON`、`GetPresetDetailJSON` |
 | 日志 | `InitLog`、`InitLogCallback` |
-| 枚举 | `RandomizeMode`、`FingerprintLayers`、`AcceptEncoding`、`RotationStrategy`、`HttpVersion`、`PreferredHTTPVersion`、`DnsConfig`、`LogLevel`、`ProxyAuthHeader` |
+| 枚举 | `RandomizeMode`、`FingerprintLayers`、`AcceptEncoding`、`RotationStrategy`、`HttpVersion`、`PreferredHTTPVersion`、`DnsConfig`、`LogLevel`、`ProxyAuthHeader`、`TrustAnchorAdvertisement`、`TrustAnchorRecovery` |
 
 完整 API 文档:`go doc github.com/EZXLabs/lkrequest-go/lkrequest`。
 
@@ -372,4 +415,4 @@ go build -tags lkcgo ./lkrequest/...  # cgo
 - `Client` 和 `Session` 可安全地跨 goroutine 共享;`Request` 发送即失效(复用请用 `Clone()`)。
 - `StreamingResponse` 实现了 `io.ReadCloser`。
 - 未调用 `SetPreset` 的 `ClientBuilder`(以及 `NewDefaultClient()`)使用库的默认预设 —— 目前是 `chrome_155`,头顺序也随之生效。需要其他指纹时调用 `SetPreset`,需要固定顺序时调用 `AddHeaderOrder` / `AddCookieOrder`。
-- QUIC/H3、自定义 DNS 解析器、SOCKS5 UDP 探测、协议版本偏好/协商、`ProxyConfig` / `MasqueConfig`、cookie 属性读取、请求级 H2 优先级权重、以及合成档 `SetRandomize` 需要库导出对应符号。在较旧的内嵌库上调用会返回 `lk: ... not supported by the loaded lkrequest library` 错误(构造器会延迟到 `Build()` 报告);包本身仍能正常加载。
+- QUIC/H3、自定义 DNS 解析器、SOCKS5 UDP 探测、协议版本偏好/协商、`ProxyConfig` / `MasqueConfig`、cookie 属性读取、请求级 H2 优先级权重、HTTP/1.1 头名大小写、信任锚标识、以及合成档 `SetRandomize` 需要库导出对应符号。在较旧的内嵌库上调用会返回 `lk: ... not supported by the loaded lkrequest library` 错误(构造器会延迟到 `Build()` 报告);包本身仍能正常加载。

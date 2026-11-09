@@ -283,6 +283,12 @@ func init() {
 	registerOptional(&ffi_lk_session_get_all_cookies_json, handle, "lk_session_get_all_cookies_json")
 	// Per-request H2 priority weight
 	registerOptional(&ffi_lk_request_set_h2_priority_weight, handle, "lk_request_set_h2_priority_weight")
+	// HTTP/1.1 header-name casing
+	registerOptional(&ffi_lk_client_builder_set_http1_title_case_headers, handle, "lk_client_builder_set_http1_title_case_headers")
+	// Trust Anchor Identifiers (TAI) negotiation
+	registerOptional(&ffi_lk_client_builder_set_trust_anchor_policy_json, handle, "lk_client_builder_set_trust_anchor_policy_json")
+	registerOptional(&ffi_lk_client_builder_add_trust_anchor_binding_json, handle, "lk_client_builder_add_trust_anchor_binding_json")
+	registerOptional(&ffi_lk_trust_anchor_identity_from_der, handle, "lk_trust_anchor_identity_from_der")
 }
 
 // registerOptional registers an FFI symbol that may be absent from older

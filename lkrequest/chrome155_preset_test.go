@@ -3,6 +3,7 @@ package lkrequest
 import (
 	"encoding/json"
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -59,12 +60,16 @@ var chrome155QUICAdditions = map[string][]string{
 // TestChrome155RetainsChrome154Shape pins what the Chrome 155 captures found:
 // TCP TLS, H2, QUIC TLS, QUIC transport parameters, H3 SETTINGS and Initial
 // packetization all keep Chrome 154's shape. What Chrome 155 adds are the QUIC
-// behaviour switches in chrome155QUICAdditions, each on. With those set aside
-// the two fingerprints are compared whole with only their names set aside, as
-// chrome_154 is against chrome_153.
+// behaviour switches in chrome155QUICAdditions, each on, and one order for its
+// trust anchor identifiers: Chrome 154's 28, sorted, where chrome_154 shuffles
+// them for every ClientHello. With those set aside the two fingerprints are
+// compared whole with only their names set aside, as chrome_154 is against
+// chrome_153.
 func TestChrome155RetainsChrome154Shape(t *testing.T) {
 	c155 := presetFingerprintWithoutName(t, "chrome_155")
 	c154 := presetFingerprintWithoutName(t, "chrome_154")
+	setTrustAnchorOrderAside(t, "chrome_155", c155, false)
+	setTrustAnchorOrderAside(t, "chrome_154", c154, true)
 
 	// A library built without QUIC/H3 reports no quic layer for either preset.
 	if quic155, ok := c155["quic"].(map[string]any); ok {
@@ -94,6 +99,26 @@ func TestChrome155RetainsChrome154Shape(t *testing.T) {
 			t.Errorf("chrome_155 is missing the %q layer chrome_154 has", layer)
 		}
 	}
+}
+
+// setTrustAnchorOrderAside checks how preset orders the trust anchor
+// identifiers of a decoded fingerprint, shuffled for every ClientHello or
+// listed in sorted order, and then sets the order aside: the identifiers are
+// sorted and the shuffle switch removed, leaving the set to compare.
+func setTrustAnchorOrderAside(t *testing.T, preset string, layers map[string]any, shuffled bool) {
+	t.Helper()
+
+	source := trustAnchorSource(t, preset, layers)
+	if source["shuffle"] != shuffled {
+		t.Errorf("%s trust anchor identifiers shuffle = %v, want %v", preset, source["shuffle"], shuffled)
+	}
+	ids := jsonStrings(source["ids"])
+	if !shuffled && !slices.IsSorted(ids) {
+		t.Errorf("%s lists its trust anchor identifiers %v, want them sorted", preset, ids)
+	}
+	slices.Sort(ids)
+	source["ids"] = ids
+	delete(source, "shuffle")
 }
 
 // TestDefaultClientsUseChrome155 covers the library's default-preset switch

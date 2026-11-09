@@ -1133,4 +1133,22 @@ func init() {
 	ffi_lk_request_set_h2_priority_weight = func(request uintptr, weight uint32) int32 {
 		return int32(C.lk_request_set_h2_priority_weight((*C.lk_request_t)(unsafe.Pointer(request)), C.uint32_t(weight)))
 	}
+
+	// HTTP/1.1 header-name casing
+	ffi_lk_client_builder_set_http1_title_case_headers = func(builder uintptr, enabled uintptr) int32 {
+		return int32(C.lk_client_builder_set_http1_title_case_headers((*C.lk_client_builder_t)(unsafe.Pointer(builder)), cBool(enabled)))
+	}
+
+	// Trust Anchor Identifiers (TAI) negotiation
+	ffi_lk_client_builder_set_trust_anchor_policy_json = func(builder uintptr, jsonPtr uintptr, jsonLen uintptr) int32 {
+		return int32(C.lk_client_builder_set_trust_anchor_policy_json((*C.lk_client_builder_t)(unsafe.Pointer(builder)), (*C.char)(unsafe.Pointer(jsonPtr)), C.size_t(jsonLen)))
+	}
+
+	ffi_lk_client_builder_add_trust_anchor_binding_json = func(builder uintptr, jsonPtr uintptr, jsonLen uintptr) int32 {
+		return int32(C.lk_client_builder_add_trust_anchor_binding_json((*C.lk_client_builder_t)(unsafe.Pointer(builder)), (*C.char)(unsafe.Pointer(jsonPtr)), C.size_t(jsonLen)))
+	}
+
+	ffi_lk_trust_anchor_identity_from_der = func(derPtr uintptr, derLen uintptr, outHex uintptr, outHexCapacity uintptr) int32 {
+		return int32(C.lk_trust_anchor_identity_from_der((*C.uint8_t)(unsafe.Pointer(derPtr)), C.size_t(derLen), (*C.char)(unsafe.Pointer(outHex)), C.size_t(outHexCapacity)))
+	}
 }
