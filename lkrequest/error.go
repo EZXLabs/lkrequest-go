@@ -17,6 +17,8 @@ type LkError struct {
 	retryable   bool
 	httpStatus  int32
 	diagnostics string
+	// attemptSummary is copied with the rest, as the handle is freed at once.
+	attemptSummary string
 }
 
 func extractError(errPtr uintptr) error {
@@ -50,6 +52,7 @@ func extractError(errPtr uintptr) error {
 	if ffi_lk_error_get_diagnostics_json(errPtr, uintptr(unsafe.Pointer(&cell[2]))) == ffiStatusOK && cell[2] != 0 {
 		e.diagnostics = goCString(unsafe.Pointer(cell[2]))
 	}
+	e.attemptSummary = copyAttemptSummary(ffi_lk_error_copy_attempt_summary_json, errPtr)
 
 	ffi_lk_error_free(errPtr)
 	return e

@@ -102,23 +102,29 @@ func TestChrome155RetainsChrome154Shape(t *testing.T) {
 }
 
 // setTrustAnchorOrderAside checks how preset orders the trust anchor
-// identifiers of a decoded fingerprint, shuffled for every ClientHello or
-// listed in sorted order, and then sets the order aside: the identifiers are
-// sorted and the shuffle switch removed, leaving the set to compare.
+// identifiers of each TLS profile in a decoded fingerprint, shuffled for every
+// ClientHello or listed in sorted order, and then sets the order aside: the
+// identifiers are sorted and the shuffle switch removed, leaving the set to
+// compare.
 func setTrustAnchorOrderAside(t *testing.T, preset string, layers map[string]any, shuffled bool) {
 	t.Helper()
 
-	source := trustAnchorSource(t, preset, layers)
-	if source["shuffle"] != shuffled {
-		t.Errorf("%s trust anchor identifiers shuffle = %v, want %v", preset, source["shuffle"], shuffled)
+	for _, layer := range tlsLayerNames {
+		if layers[layer] == nil {
+			continue
+		}
+		source := trustAnchorSource(t, preset, layers, layer)
+		if source["shuffle"] != shuffled {
+			t.Errorf("%s %s trust anchor identifiers shuffle = %v, want %v", preset, layer, source["shuffle"], shuffled)
+		}
+		ids := jsonStrings(source["ids"])
+		if !shuffled && !slices.IsSorted(ids) {
+			t.Errorf("%s %s lists its trust anchor identifiers %v, want them sorted", preset, layer, ids)
+		}
+		slices.Sort(ids)
+		source["ids"] = ids
+		delete(source, "shuffle")
 	}
-	ids := jsonStrings(source["ids"])
-	if !shuffled && !slices.IsSorted(ids) {
-		t.Errorf("%s lists its trust anchor identifiers %v, want them sorted", preset, ids)
-	}
-	slices.Sort(ids)
-	source["ids"] = ids
-	delete(source, "shuffle")
 }
 
 // TestDefaultClientsUseChrome155 covers the library's default-preset switch

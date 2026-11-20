@@ -2,10 +2,13 @@
 
 package lkrequest
 
+// The darwin library names itself @rpath/liblkrequest_ffi.dylib, so darwin
+// binaries carry an rpath to lib/darwin_arm64 and load the library from there.
+
 // #cgo CFLAGS: -I${SRCDIR}/include
 // #cgo windows,amd64  LDFLAGS: -L${SRCDIR}/lib/windows_amd64 -llkrequest_ffi -lws2_32 -lbcrypt -luserenv -lntdll
 // #cgo linux,amd64    LDFLAGS: -L${SRCDIR}/lib/linux_amd64 -llkrequest_ffi -lpthread -ldl -lm
-// #cgo darwin,arm64   LDFLAGS: -L${SRCDIR}/lib/darwin_arm64 -llkrequest_ffi -lpthread -ldl -lm -framework Security -framework CoreFoundation
+// #cgo darwin,arm64   LDFLAGS: -L${SRCDIR}/lib/darwin_arm64 -Wl,-rpath,${SRCDIR}/lib/darwin_arm64 -llkrequest_ffi -lpthread -ldl -lm -framework Security -framework CoreFoundation
 // #include "lkrequest.h"
 // #include <stdlib.h>
 import "C"
@@ -1150,5 +1153,185 @@ func init() {
 
 	ffi_lk_trust_anchor_identity_from_der = func(derPtr uintptr, derLen uintptr, outHex uintptr, outHexCapacity uintptr) int32 {
 		return int32(C.lk_trust_anchor_identity_from_der((*C.uint8_t)(unsafe.Pointer(derPtr)), C.size_t(derLen), (*C.char)(unsafe.Pointer(outHex)), C.size_t(outHexCapacity)))
+	}
+
+	// Custom profiles and profile bundles
+	ffi_lk_client_builder_set_tls_profile_json = func(builder uintptr, jsonPtr uintptr, jsonLen uintptr) int32 {
+		return int32(C.lk_client_builder_set_tls_profile_json((*C.lk_client_builder_t)(unsafe.Pointer(builder)), (*C.char)(unsafe.Pointer(jsonPtr)), C.size_t(jsonLen)))
+	}
+
+	ffi_lk_client_builder_set_h2_profile_json = func(builder uintptr, jsonPtr uintptr, jsonLen uintptr) int32 {
+		return int32(C.lk_client_builder_set_h2_profile_json((*C.lk_client_builder_t)(unsafe.Pointer(builder)), (*C.char)(unsafe.Pointer(jsonPtr)), C.size_t(jsonLen)))
+	}
+
+	ffi_lk_client_builder_set_quic_tls_profile_json = func(builder uintptr, jsonPtr uintptr, jsonLen uintptr) int32 {
+		return int32(C.lk_client_builder_set_quic_tls_profile_json((*C.lk_client_builder_t)(unsafe.Pointer(builder)), (*C.char)(unsafe.Pointer(jsonPtr)), C.size_t(jsonLen)))
+	}
+
+	ffi_lk_client_builder_clear_quic_fingerprint = func(builder uintptr) int32 {
+		return int32(C.lk_client_builder_clear_quic_fingerprint((*C.lk_client_builder_t)(unsafe.Pointer(builder))))
+	}
+
+	ffi_lk_client_builder_set_preset_json = func(builder uintptr, jsonPtr uintptr, jsonLen uintptr, outErr uintptr) int32 {
+		return int32(C.lk_client_builder_set_preset_json((*C.lk_client_builder_t)(unsafe.Pointer(builder)), (*C.char)(unsafe.Pointer(jsonPtr)), C.size_t(jsonLen), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_client_builder_set_preset_file = func(builder uintptr, pathPtr uintptr, pathLen uintptr, outErr uintptr) int32 {
+		return int32(C.lk_client_builder_set_preset_file((*C.lk_client_builder_t)(unsafe.Pointer(builder)), (*C.char)(unsafe.Pointer(pathPtr)), C.size_t(pathLen), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_preset_export_json = func(namePtr uintptr, nameLen uintptr, outJSON uintptr, outJSONCapacity uintptr, outJSONLen uintptr, outErr uintptr) int32 {
+		return int32(C.lk_preset_export_json((*C.char)(unsafe.Pointer(namePtr)), C.size_t(nameLen), (*C.char)(unsafe.Pointer(outJSON)), C.size_t(outJSONCapacity), (*C.size_t)(unsafe.Pointer(outJSONLen)), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	// Read-idle timeout and optional deadlines
+	ffi_lk_client_builder_set_timeout_read_idle = func(builder uintptr, timeoutMs uint64) int32 {
+		return int32(C.lk_client_builder_set_timeout_read_idle((*C.lk_client_builder_t)(unsafe.Pointer(builder)), C.uint64_t(timeoutMs)))
+	}
+
+	ffi_lk_client_builder_disable_timeout_dns = func(builder uintptr) int32 {
+		return int32(C.lk_client_builder_disable_timeout_dns((*C.lk_client_builder_t)(unsafe.Pointer(builder))))
+	}
+
+	ffi_lk_client_builder_disable_timeout_tcp_connect = func(builder uintptr) int32 {
+		return int32(C.lk_client_builder_disable_timeout_tcp_connect((*C.lk_client_builder_t)(unsafe.Pointer(builder))))
+	}
+
+	ffi_lk_client_builder_disable_timeout_tls_handshake = func(builder uintptr) int32 {
+		return int32(C.lk_client_builder_disable_timeout_tls_handshake((*C.lk_client_builder_t)(unsafe.Pointer(builder))))
+	}
+
+	ffi_lk_client_builder_disable_timeout_ttfb = func(builder uintptr) int32 {
+		return int32(C.lk_client_builder_disable_timeout_ttfb((*C.lk_client_builder_t)(unsafe.Pointer(builder))))
+	}
+
+	ffi_lk_client_builder_disable_timeout_total = func(builder uintptr) int32 {
+		return int32(C.lk_client_builder_disable_timeout_total((*C.lk_client_builder_t)(unsafe.Pointer(builder))))
+	}
+
+	ffi_lk_client_builder_disable_timeout_quic_connect = func(builder uintptr) int32 {
+		return int32(C.lk_client_builder_disable_timeout_quic_connect((*C.lk_client_builder_t)(unsafe.Pointer(builder))))
+	}
+
+	ffi_lk_client_builder_disable_timeout_read_idle = func(builder uintptr) int32 {
+		return int32(C.lk_client_builder_disable_timeout_read_idle((*C.lk_client_builder_t)(unsafe.Pointer(builder))))
+	}
+
+	// TLS / QUIC session cache
+	ffi_lk_client_builder_set_tls_session_cache_enabled = func(builder uintptr, enabled uintptr) int32 {
+		return int32(C.lk_client_builder_set_tls_session_cache_enabled((*C.lk_client_builder_t)(unsafe.Pointer(builder)), cBool(enabled)))
+	}
+
+	ffi_lk_client_builder_set_tls_session_cache_ttl = func(builder uintptr, ttlMs uint64) int32 {
+		return int32(C.lk_client_builder_set_tls_session_cache_ttl((*C.lk_client_builder_t)(unsafe.Pointer(builder)), C.uint64_t(ttlMs)))
+	}
+
+	ffi_lk_client_builder_reset_tls_session_cache_ttl = func(builder uintptr) int32 {
+		return int32(C.lk_client_builder_reset_tls_session_cache_ttl((*C.lk_client_builder_t)(unsafe.Pointer(builder))))
+	}
+
+	// Attempt limits and attempt summaries
+	ffi_lk_client_builder_set_connect_attempt_limit = func(builder uintptr, limit uint64, outErr uintptr) int32 {
+		return int32(C.lk_client_builder_set_connect_attempt_limit((*C.lk_client_builder_t)(unsafe.Pointer(builder)), C.uint64_t(limit), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_client_builder_clear_connect_attempt_limit = func(builder uintptr, outErr uintptr) int32 {
+		return int32(C.lk_client_builder_clear_connect_attempt_limit((*C.lk_client_builder_t)(unsafe.Pointer(builder)), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_client_builder_get_connect_attempt_limit = func(builder uintptr, outLimit uintptr, outErr uintptr) int32 {
+		return int32(C.lk_client_builder_get_connect_attempt_limit((*C.lk_client_builder_t)(unsafe.Pointer(builder)), (*C.struct_lk_attempt_limit_view_t)(unsafe.Pointer(outLimit)), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_client_builder_set_extra_http_attempt_limit = func(builder uintptr, limit uint64, outErr uintptr) int32 {
+		return int32(C.lk_client_builder_set_extra_http_attempt_limit((*C.lk_client_builder_t)(unsafe.Pointer(builder)), C.uint64_t(limit), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_client_builder_clear_extra_http_attempt_limit = func(builder uintptr, outErr uintptr) int32 {
+		return int32(C.lk_client_builder_clear_extra_http_attempt_limit((*C.lk_client_builder_t)(unsafe.Pointer(builder)), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_client_builder_get_extra_http_attempt_limit = func(builder uintptr, outLimit uintptr, outErr uintptr) int32 {
+		return int32(C.lk_client_builder_get_extra_http_attempt_limit((*C.lk_client_builder_t)(unsafe.Pointer(builder)), (*C.struct_lk_attempt_limit_view_t)(unsafe.Pointer(outLimit)), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_client_get_connect_attempt_limit = func(client uintptr, outLimit uintptr, outErr uintptr) int32 {
+		return int32(C.lk_client_get_connect_attempt_limit((*C.lk_client_t)(unsafe.Pointer(client)), (*C.struct_lk_attempt_limit_view_t)(unsafe.Pointer(outLimit)), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_client_get_extra_http_attempt_limit = func(client uintptr, outLimit uintptr, outErr uintptr) int32 {
+		return int32(C.lk_client_get_extra_http_attempt_limit((*C.lk_client_t)(unsafe.Pointer(client)), (*C.struct_lk_attempt_limit_view_t)(unsafe.Pointer(outLimit)), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_session_builder_set_connect_attempt_limit = func(builder uintptr, limit uint64, outErr uintptr) int32 {
+		return int32(C.lk_session_builder_set_connect_attempt_limit((*C.lk_session_builder_t)(unsafe.Pointer(builder)), C.uint64_t(limit), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_session_builder_clear_connect_attempt_limit = func(builder uintptr, outErr uintptr) int32 {
+		return int32(C.lk_session_builder_clear_connect_attempt_limit((*C.lk_session_builder_t)(unsafe.Pointer(builder)), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_session_builder_get_connect_attempt_limit = func(builder uintptr, outLimit uintptr, outErr uintptr) int32 {
+		return int32(C.lk_session_builder_get_connect_attempt_limit((*C.lk_session_builder_t)(unsafe.Pointer(builder)), (*C.struct_lk_attempt_limit_view_t)(unsafe.Pointer(outLimit)), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_session_builder_set_extra_http_attempt_limit = func(builder uintptr, limit uint64, outErr uintptr) int32 {
+		return int32(C.lk_session_builder_set_extra_http_attempt_limit((*C.lk_session_builder_t)(unsafe.Pointer(builder)), C.uint64_t(limit), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_session_builder_clear_extra_http_attempt_limit = func(builder uintptr, outErr uintptr) int32 {
+		return int32(C.lk_session_builder_clear_extra_http_attempt_limit((*C.lk_session_builder_t)(unsafe.Pointer(builder)), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_session_builder_get_extra_http_attempt_limit = func(builder uintptr, outLimit uintptr, outErr uintptr) int32 {
+		return int32(C.lk_session_builder_get_extra_http_attempt_limit((*C.lk_session_builder_t)(unsafe.Pointer(builder)), (*C.struct_lk_attempt_limit_view_t)(unsafe.Pointer(outLimit)), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_session_get_connect_attempt_limit = func(session uintptr, outLimit uintptr, outErr uintptr) int32 {
+		return int32(C.lk_session_get_connect_attempt_limit((*C.lk_session_t)(unsafe.Pointer(session)), (*C.struct_lk_attempt_limit_view_t)(unsafe.Pointer(outLimit)), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_session_get_extra_http_attempt_limit = func(session uintptr, outLimit uintptr, outErr uintptr) int32 {
+		return int32(C.lk_session_get_extra_http_attempt_limit((*C.lk_session_t)(unsafe.Pointer(session)), (*C.struct_lk_attempt_limit_view_t)(unsafe.Pointer(outLimit)), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_request_set_connect_attempt_limit = func(request uintptr, limit uint64, outErr uintptr) int32 {
+		return int32(C.lk_request_set_connect_attempt_limit((*C.lk_request_t)(unsafe.Pointer(request)), C.uint64_t(limit), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_request_clear_connect_attempt_limit = func(request uintptr, outErr uintptr) int32 {
+		return int32(C.lk_request_clear_connect_attempt_limit((*C.lk_request_t)(unsafe.Pointer(request)), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_request_get_connect_attempt_limit = func(request uintptr, outLimit uintptr, outErr uintptr) int32 {
+		return int32(C.lk_request_get_connect_attempt_limit((*C.lk_request_t)(unsafe.Pointer(request)), (*C.struct_lk_attempt_limit_view_t)(unsafe.Pointer(outLimit)), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_request_set_extra_http_attempt_limit = func(request uintptr, limit uint64, outErr uintptr) int32 {
+		return int32(C.lk_request_set_extra_http_attempt_limit((*C.lk_request_t)(unsafe.Pointer(request)), C.uint64_t(limit), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_request_clear_extra_http_attempt_limit = func(request uintptr, outErr uintptr) int32 {
+		return int32(C.lk_request_clear_extra_http_attempt_limit((*C.lk_request_t)(unsafe.Pointer(request)), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_request_get_extra_http_attempt_limit = func(request uintptr, outLimit uintptr, outErr uintptr) int32 {
+		return int32(C.lk_request_get_extra_http_attempt_limit((*C.lk_request_t)(unsafe.Pointer(request)), (*C.struct_lk_attempt_limit_view_t)(unsafe.Pointer(outLimit)), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_request_enable_attempt_summary = func(request uintptr, enabled uintptr, outErr uintptr) int32 {
+		return int32(C.lk_request_enable_attempt_summary((*C.lk_request_t)(unsafe.Pointer(request)), cBool(enabled), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_response_copy_attempt_summary_json = func(response uintptr, buffer uintptr, capacity uintptr, outRequired uintptr, outErr uintptr) int32 {
+		return int32(C.lk_response_copy_attempt_summary_json((*C.lk_response_t)(unsafe.Pointer(response)), (*C.uint8_t)(unsafe.Pointer(buffer)), C.size_t(capacity), (*C.size_t)(unsafe.Pointer(outRequired)), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_streaming_response_copy_attempt_summary_json = func(stream uintptr, buffer uintptr, capacity uintptr, outRequired uintptr, outErr uintptr) int32 {
+		return int32(C.lk_streaming_response_copy_attempt_summary_json((*C.lk_streaming_response_t)(unsafe.Pointer(stream)), (*C.uint8_t)(unsafe.Pointer(buffer)), C.size_t(capacity), (*C.size_t)(unsafe.Pointer(outRequired)), (**C.lk_error_t)(unsafe.Pointer(outErr))))
+	}
+
+	ffi_lk_error_copy_attempt_summary_json = func(err uintptr, buffer uintptr, capacity uintptr, outRequired uintptr, outErr uintptr) int32 {
+		return int32(C.lk_error_copy_attempt_summary_json((*C.lk_error_t)(unsafe.Pointer(err)), (*C.uint8_t)(unsafe.Pointer(buffer)), C.size_t(capacity), (*C.size_t)(unsafe.Pointer(outRequired)), (**C.lk_error_t)(unsafe.Pointer(outErr))))
 	}
 }

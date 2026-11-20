@@ -63,25 +63,39 @@ typedef struct lk_bytes_view_t {
 #define LK_FP_LAYER_TLS 1
 
 enum lk_status_t
-#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#ifdef __cplusplus
   : int32_t
-#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#endif // __cplusplus
  {
   LK_OK = 0,
   LK_ERR = -1,
 };
 #ifndef __cplusplus
-#if __STDC_VERSION__ >= 202311L
-typedef enum lk_status_t lk_status_t;
-#else
 typedef int32_t lk_status_t;
-#endif // __STDC_VERSION__ >= 202311L
+#endif // __cplusplus
+
+/**
+ * Scope supplying the effective finite limit.
+ */
+enum lk_attempt_limit_scope_t
+#ifdef __cplusplus
+  : int32_t
+#endif // __cplusplus
+ {
+  LK_ATTEMPT_LIMIT_UNSET = 0,
+  LK_ATTEMPT_LIMIT_CLIENT = 1,
+  LK_ATTEMPT_LIMIT_SESSION = 2,
+  LK_ATTEMPT_LIMIT_REQUEST = 3,
+  LK_ATTEMPT_LIMIT_UNKNOWN = 4,
+};
+#ifndef __cplusplus
+typedef int32_t lk_attempt_limit_scope_t;
 #endif // __cplusplus
 
 enum lk_dns_config_t
-#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#ifdef __cplusplus
   : int32_t
-#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#endif // __cplusplus
  {
   LK_DNS_SYSTEM = 0,
   LK_DNS_GOOGLE = 1,
@@ -92,11 +106,7 @@ enum lk_dns_config_t
   LK_DNS_QUAD9_HTTPS = 6,
 };
 #ifndef __cplusplus
-#if __STDC_VERSION__ >= 202311L
-typedef enum lk_dns_config_t lk_dns_config_t;
-#else
 typedef int32_t lk_dns_config_t;
-#endif // __STDC_VERSION__ >= 202311L
 #endif // __cplusplus
 
 /**
@@ -106,9 +116,9 @@ typedef int32_t lk_dns_config_t;
  * the `synthetic-fp` feature; without it the setter returns an error.
  */
 enum lk_randomize_mode_t
-#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#ifdef __cplusplus
   : int32_t
-#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#endif // __cplusplus
  {
   /**
    * Tier 0 — emit the preset's fingerprint as-is.
@@ -128,17 +138,13 @@ enum lk_randomize_mode_t
   LK_RANDOMIZE_FULL = 3,
 };
 #ifndef __cplusplus
-#if __STDC_VERSION__ >= 202311L
-typedef enum lk_randomize_mode_t lk_randomize_mode_t;
-#else
 typedef int32_t lk_randomize_mode_t;
-#endif // __STDC_VERSION__ >= 202311L
 #endif // __cplusplus
 
 enum lk_error_code_t
-#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#ifdef __cplusplus
   : int32_t
-#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#endif // __cplusplus
  {
   LK_ERR_UNKNOWN = 1,
   LK_ERR_INVALID_ARGUMENT = 2,
@@ -165,17 +171,13 @@ enum lk_error_code_t
   LK_ERR_H3 = 23,
 };
 #ifndef __cplusplus
-#if __STDC_VERSION__ >= 202311L
-typedef enum lk_error_code_t lk_error_code_t;
-#else
 typedef int32_t lk_error_code_t;
-#endif // __STDC_VERSION__ >= 202311L
 #endif // __cplusplus
 
 enum lk_phase_t
-#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#ifdef __cplusplus
   : int32_t
-#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#endif // __cplusplus
  {
   LK_PHASE_NONE = 0,
   LK_PHASE_DNS_RESOLUTION = 1,
@@ -190,17 +192,13 @@ enum lk_phase_t
   LK_PHASE_QUIC_FALLBACK = 10,
 };
 #ifndef __cplusplus
-#if __STDC_VERSION__ >= 202311L
-typedef enum lk_phase_t lk_phase_t;
-#else
 typedef int32_t lk_phase_t;
-#endif // __STDC_VERSION__ >= 202311L
 #endif // __cplusplus
 
 enum lk_op_state_t
-#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#ifdef __cplusplus
   : int32_t
-#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#endif // __cplusplus
  {
   LK_OP_IN_PROGRESS = 0,
   LK_OP_COMPLETED_OK = 1,
@@ -209,20 +207,16 @@ enum lk_op_state_t
   LK_OP_CONSUMED = 4,
 };
 #ifndef __cplusplus
-#if __STDC_VERSION__ >= 202311L
-typedef enum lk_op_state_t lk_op_state_t;
-#else
 typedef int32_t lk_op_state_t;
-#endif // __STDC_VERSION__ >= 202311L
 #endif // __cplusplus
 
 /**
  * Which request header carries HTTP-based proxy credentials.
  */
 enum lk_proxy_auth_header_t
-#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#ifdef __cplusplus
   : int32_t
-#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#endif // __cplusplus
  {
   /**
    * `Proxy-Authorization` (default).
@@ -234,33 +228,25 @@ enum lk_proxy_auth_header_t
   LK_PROXY_AUTH_HEADER_AUTHORIZATION = 1,
 };
 #ifndef __cplusplus
-#if __STDC_VERSION__ >= 202311L
-typedef enum lk_proxy_auth_header_t lk_proxy_auth_header_t;
-#else
 typedef int32_t lk_proxy_auth_header_t;
-#endif // __STDC_VERSION__ >= 202311L
 #endif // __cplusplus
 
 enum lk_rotation_strategy_t
-#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#ifdef __cplusplus
   : int32_t
-#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#endif // __cplusplus
  {
   LK_ROTATION_ROUND_ROBIN = 0,
   LK_ROTATION_RANDOM = 1,
 };
 #ifndef __cplusplus
-#if __STDC_VERSION__ >= 202311L
-typedef enum lk_rotation_strategy_t lk_rotation_strategy_t;
-#else
 typedef int32_t lk_rotation_strategy_t;
-#endif // __STDC_VERSION__ >= 202311L
 #endif // __cplusplus
 
 enum lk_preferred_http_version_t
-#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#ifdef __cplusplus
   : int32_t
-#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#endif // __cplusplus
  {
   LK_PREFERRED_HTTP_VERSION_AUTO = 0,
   LK_PREFERRED_HTTP_VERSION_HTTP1_ONLY = 10,
@@ -269,17 +255,13 @@ enum lk_preferred_http_version_t
   LK_PREFERRED_HTTP_VERSION_HTTP3_WITH_FALLBACK = 31,
 };
 #ifndef __cplusplus
-#if __STDC_VERSION__ >= 202311L
-typedef enum lk_preferred_http_version_t lk_preferred_http_version_t;
-#else
 typedef int32_t lk_preferred_http_version_t;
-#endif // __STDC_VERSION__ >= 202311L
 #endif // __cplusplus
 
 enum lk_http_version_t
-#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#ifdef __cplusplus
   : int32_t
-#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#endif // __cplusplus
  {
   LK_HTTP_VERSION_UNKNOWN = 0,
   LK_HTTP_VERSION_10 = 10,
@@ -288,17 +270,13 @@ enum lk_http_version_t
   LK_HTTP_VERSION_3 = 30,
 };
 #ifndef __cplusplus
-#if __STDC_VERSION__ >= 202311L
-typedef enum lk_http_version_t lk_http_version_t;
-#else
 typedef int32_t lk_http_version_t;
-#endif // __STDC_VERSION__ >= 202311L
 #endif // __cplusplus
 
 enum lk_negotiated_http_version_t
-#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#ifdef __cplusplus
   : int32_t
-#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#endif // __cplusplus
  {
   LK_NEGOTIATED_HTTP_VERSION_10 = 10,
   LK_NEGOTIATED_HTTP_VERSION_11 = 11,
@@ -306,50 +284,38 @@ enum lk_negotiated_http_version_t
   LK_NEGOTIATED_HTTP_VERSION_3 = 30,
 };
 #ifndef __cplusplus
-#if __STDC_VERSION__ >= 202311L
-typedef enum lk_negotiated_http_version_t lk_negotiated_http_version_t;
-#else
 typedef int32_t lk_negotiated_http_version_t;
-#endif // __STDC_VERSION__ >= 202311L
 #endif // __cplusplus
 
 enum lk_socks5_udp_probe_mode_t
-#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#ifdef __cplusplus
   : int32_t
-#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#endif // __cplusplus
  {
   LK_SOCKS5_UDP_PROBE_ASSOCIATE_ONLY = 0,
   LK_SOCKS5_UDP_PROBE_DNS_ROUND_TRIP = 1,
 };
 #ifndef __cplusplus
-#if __STDC_VERSION__ >= 202311L
-typedef enum lk_socks5_udp_probe_mode_t lk_socks5_udp_probe_mode_t;
-#else
 typedef int32_t lk_socks5_udp_probe_mode_t;
-#endif // __STDC_VERSION__ >= 202311L
 #endif // __cplusplus
 
 enum lk_socks5_udp_probe_phase_t
-#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#ifdef __cplusplus
   : int32_t
-#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#endif // __cplusplus
  {
   LK_SOCKS5_UDP_PROBE_PHASE_NOT_SOCKS5 = 0,
   LK_SOCKS5_UDP_PROBE_PHASE_UDP_ASSOCIATE = 1,
   LK_SOCKS5_UDP_PROBE_PHASE_UDP_ROUND_TRIP = 2,
 };
 #ifndef __cplusplus
-#if __STDC_VERSION__ >= 202311L
-typedef enum lk_socks5_udp_probe_phase_t lk_socks5_udp_probe_phase_t;
-#else
 typedef int32_t lk_socks5_udp_probe_phase_t;
-#endif // __STDC_VERSION__ >= 202311L
 #endif // __cplusplus
 
 enum lk_socks5_udp_probe_support_t
-#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#ifdef __cplusplus
   : int32_t
-#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+#endif // __cplusplus
  {
   LK_SOCKS5_UDP_SUPPORT_NOT_SOCKS5 = 0,
   LK_SOCKS5_UDP_SUPPORT_ASSOCIATE_OK = 1,
@@ -358,12 +324,20 @@ enum lk_socks5_udp_probe_support_t
   LK_SOCKS5_UDP_SUPPORT_FAILED = 4,
 };
 #ifndef __cplusplus
-#if __STDC_VERSION__ >= 202311L
-typedef enum lk_socks5_udp_probe_support_t lk_socks5_udp_probe_support_t;
-#else
 typedef int32_t lk_socks5_udp_probe_support_t;
-#endif // __STDC_VERSION__ >= 202311L
 #endif // __cplusplus
+
+/**
+ * One requested/effective limit. Values are meaningful only when present.
+ * Zero is a finite limit. Clear removes an override and inherits its parent.
+ */
+typedef struct lk_attempt_limit_view_t {
+  bool configured_present;
+  uint64_t configured;
+  bool effective_present;
+  uint64_t effective;
+  lk_attempt_limit_scope_t scope;
+} lk_attempt_limit_view_t;
 
 /**
  * C-style DNS resolver used by `ClientBuilder`.
@@ -574,11 +548,95 @@ lk_status_t lk_client_builder_build(lk_client_builder_t *builder,
                                     lk_client_t **out_client,
                                     lk_error_t **out_err);
 
+/**
+ * Clear this override. Session/request levels still inherit their parent.
+ * Failure leaves the previous configuration intact.
+ */
+lk_status_t lk_client_builder_clear_connect_attempt_limit(lk_client_builder_t *handle,
+                                                          lk_error_t **out_err);
+
+/**
+ * Clear this override. Session/request levels still inherit their parent.
+ * Failure leaves the previous configuration intact.
+ */
+lk_status_t lk_client_builder_clear_extra_http_attempt_limit(lk_client_builder_t *handle,
+                                                             lk_error_t **out_err);
+
+/**
+ * Use the effective TCP TLS profile for QUIC, overriding a preset's separate
+ * QUIC TLS profile (Rust ClientBuilder::clear_quic_fingerprint). Requires quic-h3.
+ */
+lk_status_t lk_client_builder_clear_quic_fingerprint(lk_client_builder_t *builder);
+
 lk_status_t lk_client_builder_disable_http3(lk_client_builder_t *builder);
+
+/**
+ * Disable the client DNS deadline. Resolver-specific limits remain independent.
+ */
+lk_status_t lk_client_builder_disable_timeout_dns(lk_client_builder_t *builder);
+
+/**
+ * Disable the QUIC handshake and HTTP/3 setup deadlines.
+ */
+lk_status_t lk_client_builder_disable_timeout_quic_connect(lk_client_builder_t *builder);
+
+/**
+ * Disable the response body read-idle timer without changing the total deadline.
+ */
+lk_status_t lk_client_builder_disable_timeout_read_idle(lk_client_builder_t *builder);
+
+/**
+ * Disable the TCP/proxy connection deadline.
+ */
+lk_status_t lk_client_builder_disable_timeout_tcp_connect(lk_client_builder_t *builder);
+
+/**
+ * Disable the TLS handshake deadline.
+ */
+lk_status_t lk_client_builder_disable_timeout_tls_handshake(lk_client_builder_t *builder);
+
+/**
+ * Disable the overall deadline, including for long-lived streaming responses.
+ * Phase timeouts remain active. Setting the total timeout enables it again.
+ */
+lk_status_t lk_client_builder_disable_timeout_total(lk_client_builder_t *builder);
+
+/**
+ * Disable the response-header deadline, including its upload accounting.
+ */
+lk_status_t lk_client_builder_disable_timeout_ttfb(lk_client_builder_t *builder);
 
 void lk_client_builder_free(lk_client_builder_t *builder);
 
+/**
+ * Read requested and effective values without changing configuration.
+ */
+lk_status_t lk_client_builder_get_connect_attempt_limit(const lk_client_builder_t *handle,
+                                                        struct lk_attempt_limit_view_t *out_limit,
+                                                        lk_error_t **out_err);
+
+/**
+ * Read requested and effective values without changing configuration.
+ */
+lk_status_t lk_client_builder_get_extra_http_attempt_limit(const lk_client_builder_t *handle,
+                                                           struct lk_attempt_limit_view_t *out_limit,
+                                                           lk_error_t **out_err);
+
 lk_client_builder_t *lk_client_builder_new(void);
+
+/**
+ * Restore default cache TTLs: TLS 1.2 one hour; TLS 1.3/QUIC up to seven days.
+ * Does not change the cache enable switch.
+ */
+lk_status_t lk_client_builder_reset_tls_session_cache_ttl(lk_client_builder_t *builder);
+
+/**
+ * Set a finite cap, including zero. A child may not relax its parent.
+ * Failure leaves the previous configuration intact.
+ */
+lk_status_t lk_client_builder_set_connect_attempt_limit(lk_client_builder_t *handle,
+                                                        uint64_t limit,
+                                                        lk_error_t **out_err);
 
 lk_status_t lk_client_builder_set_dns(lk_client_builder_t *builder, lk_dns_config_t dns_config);
 
@@ -593,6 +651,17 @@ lk_status_t lk_client_builder_set_ech_config(lk_client_builder_t *builder,
                                              const uint8_t *data_ptr,
                                              size_t data_len);
 
+/**
+ * Set a finite cap, including zero. A child may not relax its parent.
+ * Failure leaves the previous configuration intact.
+ */
+lk_status_t lk_client_builder_set_extra_http_attempt_limit(lk_client_builder_t *handle,
+                                                           uint64_t limit,
+                                                           lk_error_t **out_err);
+
+/**
+ * Authorize H2-to-H1 request fallback (default: disabled).
+ */
 lk_status_t lk_client_builder_set_fallback_h2_to_h1(lk_client_builder_t *builder, bool enabled);
 
 /**
@@ -606,6 +675,19 @@ lk_status_t lk_client_builder_set_fallback_proxy_to_direct(lk_client_builder_t *
                                                            bool enabled);
 
 lk_status_t lk_client_builder_set_h2_preset(lk_client_builder_t *builder, const char *preset_name);
+
+/**
+ * Set a custom HTTP/2 profile, corresponding to Rust ClientBuilder::h2_profile.
+ * Input is copied, limited to 1 MiB and validated before replacing the override.
+ * NULL / 0 restores the selected H2 preset (or the client's preset).
+ * The override takes precedence over both preset setters regardless of order.
+ * Native H2 JSON only describes data fields: it uses baseline runtime behavior,
+ * and an explicit `behavior` field is rejected rather than silently ignored.
+ * Other protocol profiles and header-order configuration are unchanged.
+ */
+lk_status_t lk_client_builder_set_h2_profile_json(lk_client_builder_t *builder,
+                                                  const char *json_ptr,
+                                                  size_t json_len);
 
 /**
  * Choose HTTP/1.1 request header casing. Defaults to true (Title-Case).
@@ -661,9 +743,40 @@ lk_status_t lk_client_builder_set_min_transfer_rate(lk_client_builder_t *builder
 
 lk_status_t lk_client_builder_set_preset(lk_client_builder_t *builder, const char *preset_name);
 
+/**
+ * Read only the caller-supplied UTF-8 file path and load a complete v2 bundle.
+ * The file is bounded to 1 MiB; JSON cannot request additional file/network I/O.
+ */
+lk_status_t lk_client_builder_set_preset_file(lk_client_builder_t *builder,
+                                              const char *path_ptr,
+                                              size_t path_len,
+                                              lk_error_t **out_err);
+
+/**
+ * Load a complete v2 bundle. NULL/0 removes the bundle override and restores
+ * the selected named preset. Explicit component overrides remain in effect.
+ * Failure leaves the builder unchanged. Structured errors are available in
+ * lk_error_get_diagnostics_json under preset_error (code, path, message).
+ */
+lk_status_t lk_client_builder_set_preset_json(lk_client_builder_t *builder,
+                                              const char *json_ptr,
+                                              size_t json_len,
+                                              lk_error_t **out_err);
+
 lk_status_t lk_client_builder_set_quic_profile_json(lk_client_builder_t *builder,
                                                     const char *json_ptr,
                                                     size_t json_len);
+
+/**
+ * Set an independent QUIC TLS profile (Rust ClientBuilder::quic_fingerprint).
+ * Requires quic-h3. The input is copied, limited to 1 MiB and validated as TLS
+ * with TLS 1.3 enabled. NULL / 0 restores the selected preset's QUIC TLS profile.
+ * Custom profile overrides take precedence over presets regardless of order.
+ * This does not enable H3 or change the TCP TLS / QUIC transport profiles.
+ */
+lk_status_t lk_client_builder_set_quic_tls_profile_json(lk_client_builder_t *builder,
+                                                        const char *json_ptr,
+                                                        size_t json_len);
 
 /**
  * Set the fingerprint randomization policy.
@@ -677,6 +790,10 @@ lk_status_t lk_client_builder_set_randomize(lk_client_builder_t *builder,
                                             lk_randomize_mode_t mode,
                                             uint32_t layers);
 
+/**
+ * Authorize bounded closed-connection recovery and QUIC 0-RTT replay.
+ * Disabled by default; request replay safety checks still apply.
+ */
 lk_status_t lk_client_builder_set_retry_on_connection_close(lk_client_builder_t *builder,
                                                             bool enabled);
 
@@ -693,15 +810,53 @@ lk_status_t lk_client_builder_set_timeout_dns(lk_client_builder_t *builder, uint
 lk_status_t lk_client_builder_set_timeout_quic_connect(lk_client_builder_t *builder,
                                                        uint64_t timeout_ms);
 
+/**
+ * Limit each pending response body read, in milliseconds. Disabled by default.
+ */
+lk_status_t lk_client_builder_set_timeout_read_idle(lk_client_builder_t *builder,
+                                                    uint64_t timeout_ms);
+
 lk_status_t lk_client_builder_set_timeout_tcp_connect(lk_client_builder_t *builder,
                                                       uint64_t timeout_ms);
 
 lk_status_t lk_client_builder_set_timeout_tls_handshake(lk_client_builder_t *builder,
                                                         uint64_t timeout_ms);
 
+/**
+ * Set the overall deadline in milliseconds (default: 120000).
+ * Zero is an immediate timeout; use disable_timeout_total to disable it.
+ */
 lk_status_t lk_client_builder_set_timeout_total(lk_client_builder_t *builder, uint64_t timeout_ms);
 
 lk_status_t lk_client_builder_set_timeout_ttfb(lk_client_builder_t *builder, uint64_t timeout_ms);
+
+/**
+ * Load a serialized native TlsProfile JSON object.
+ * The input is copied; strict ClientHello mirror
+ * templates are rejected. NULL / 0 clears the override. The custom TLS profile
+ * overrides the preset's TLS profile regardless of setter order; other preset
+ * layers and explicit runtime settings retain their existing behavior.
+ * Inputs are limited to 1 MiB and checked for TLS structural validity.
+ */
+lk_status_t lk_client_builder_set_tls_profile_json(lk_client_builder_t *builder,
+                                                   const char *json_ptr,
+                                                   size_t json_len);
+
+/**
+ * Enable or disable TLS/QUIC session caching. Enabled by default.
+ * Disabling forces full handshakes on new connections; pooled connections
+ * and the profile's advertised extensions are unaffected.
+ */
+lk_status_t lk_client_builder_set_tls_session_cache_enabled(lk_client_builder_t *builder,
+                                                            bool enabled);
+
+/**
+ * Override TLS/QUIC cache TTL in milliseconds. Zero prevents caching.
+ * Shorter server lifetimes and TLS 1.3's seven-day protocol limit still apply.
+ * Does not re-enable a disabled cache or reset TLS 1.2's original secret age.
+ */
+lk_status_t lk_client_builder_set_tls_session_cache_ttl(lk_client_builder_t *builder,
+                                                        uint64_t ttl_ms);
 
 /**
  * Configure TAI advertisement and recovery. JSON example:
@@ -724,11 +879,37 @@ lk_status_t lk_client_fingerprint_info_json(const lk_client_t *client,
 
 void lk_client_free(lk_client_t *client);
 
+/**
+ * Read requested and effective values without changing configuration.
+ */
+lk_status_t lk_client_get_connect_attempt_limit(const lk_client_t *handle,
+                                                struct lk_attempt_limit_view_t *out_limit,
+                                                lk_error_t **out_err);
+
+/**
+ * Read requested and effective values without changing configuration.
+ */
+lk_status_t lk_client_get_extra_http_attempt_limit(const lk_client_t *handle,
+                                                   struct lk_attempt_limit_view_t *out_limit,
+                                                   lk_error_t **out_err);
+
 lk_status_t lk_client_new(const char *preset_name, lk_client_t **out_client, lk_error_t **out_err);
 
 lk_status_t lk_client_new_default(lk_client_t **out_client, lk_error_t **out_err);
 
 lk_error_code_t lk_error_code(const lk_error_t *err);
+
+/**
+ * Copy a fresh JSON snapshot without a trailing NUL. NULL/0 queries required size.
+ * Insufficient capacity writes only out_required and returns LK_ERR. Retry with
+ * a larger buffer if an active snapshot grows. Counts settle when final is true.
+ * An operation retains its summary after cancellation and result consumption.
+ */
+lk_status_t lk_error_copy_attempt_summary_json(const lk_error_t *handle,
+                                               uint8_t *buffer,
+                                               size_t capacity,
+                                               size_t *out_required,
+                                               lk_error_t **out_err);
 
 void lk_error_free(lk_error_t *err);
 
@@ -925,6 +1106,18 @@ lk_multipart_t *lk_multipart_new(void);
 
 lk_status_t lk_op_cancel(lk_op_t *op);
 
+/**
+ * Copy a fresh JSON snapshot without a trailing NUL. NULL/0 queries required size.
+ * Insufficient capacity writes only out_required and returns LK_ERR. Retry with
+ * a larger buffer if an active snapshot grows. Counts settle when final is true.
+ * An operation retains its summary after cancellation and result consumption.
+ */
+lk_status_t lk_op_copy_attempt_summary_json(const lk_op_t *handle,
+                                            uint8_t *buffer,
+                                            size_t capacity,
+                                            size_t *out_required,
+                                            lk_error_t **out_err);
+
 void lk_op_free(lk_op_t *op);
 
 lk_op_state_t lk_op_poll(const lk_op_t *op);
@@ -950,6 +1143,19 @@ lk_status_t lk_op_take_streaming_response(lk_op_t *op,
                                           lk_error_t **out_err);
 
 lk_op_state_t lk_op_wait(const lk_op_t *op, uint64_t timeout_ms);
+
+/**
+ * Export a built-in preset as a complete, reloadable v2 document.
+ * Query with NULL/0 output; out_json_len excludes NUL. Copy requires length+1
+ * bytes; an undersized buffer returns RESOURCE_LIMIT_EXCEEDED without a partial
+ * document. The caller owns the buffer. No network or file I/O is performed.
+ */
+lk_status_t lk_preset_export_json(const char *name_ptr,
+                                  size_t name_len,
+                                  char *out_json,
+                                  size_t out_json_capacity,
+                                  size_t *out_json_len,
+                                  lk_error_t **out_err);
 
 lk_status_t lk_preset_get_detail_json(const char *name_ptr,
                                       size_t name_len,
@@ -1158,7 +1364,41 @@ lk_status_t lk_request_add_query(lk_request_t *request,
                                  const char *value_ptr,
                                  size_t value_len);
 
+/**
+ * Clear this override. Session/request levels still inherit their parent.
+ * Failure leaves the previous configuration intact.
+ */
+lk_status_t lk_request_clear_connect_attempt_limit(lk_request_t *handle, lk_error_t **out_err);
+
+/**
+ * Clear this override. Session/request levels still inherit their parent.
+ * Failure leaves the previous configuration intact.
+ */
+lk_status_t lk_request_clear_extra_http_attempt_limit(lk_request_t *handle, lk_error_t **out_err);
+
+/**
+ * Enable separate attempt summaries before sending. Disabled by default.
+ * This setting does not change diagnostics JSON or enable any retries.
+ */
+lk_status_t lk_request_enable_attempt_summary(lk_request_t *request,
+                                              bool enabled,
+                                              lk_error_t **out_err);
+
 void lk_request_free(lk_request_t *request);
+
+/**
+ * Read requested and effective values without changing configuration.
+ */
+lk_status_t lk_request_get_connect_attempt_limit(const lk_request_t *handle,
+                                                 struct lk_attempt_limit_view_t *out_limit,
+                                                 lk_error_t **out_err);
+
+/**
+ * Read requested and effective values without changing configuration.
+ */
+lk_status_t lk_request_get_extra_http_attempt_limit(const lk_request_t *handle,
+                                                    struct lk_attempt_limit_view_t *out_limit,
+                                                    lk_error_t **out_err);
 
 lk_status_t lk_request_new(const lk_session_t *session,
                            const char *method_ptr,
@@ -1200,6 +1440,14 @@ lk_status_t lk_request_set_body_bytes(lk_request_t *request,
                                       const uint8_t *data_ptr,
                                       size_t data_len);
 
+/**
+ * Set a finite cap, including zero. A child may not relax its parent.
+ * Failure leaves the previous configuration intact.
+ */
+lk_status_t lk_request_set_connect_attempt_limit(lk_request_t *handle,
+                                                 uint64_t limit,
+                                                 lk_error_t **out_err);
+
 lk_status_t lk_request_set_cookie(lk_request_t *request,
                                   const char *name_ptr,
                                   size_t name_len,
@@ -1211,6 +1459,14 @@ lk_status_t lk_request_set_cookie_override(lk_request_t *request,
                                            size_t name_len,
                                            const char *value_ptr,
                                            size_t value_len);
+
+/**
+ * Set a finite cap, including zero. A child may not relax its parent.
+ * Failure leaves the previous configuration intact.
+ */
+lk_status_t lk_request_set_extra_http_attempt_limit(lk_request_t *handle,
+                                                    uint64_t limit,
+                                                    lk_error_t **out_err);
 
 lk_status_t lk_request_set_form(lk_request_t *request,
                                 const struct lk_form_pair_t *pairs_ptr,
@@ -1266,6 +1522,18 @@ lk_status_t lk_response_cookie_value_at(const lk_response_t *response,
                                         size_t index,
                                         const char **out_ptr,
                                         size_t *out_len);
+
+/**
+ * Copy a fresh JSON snapshot without a trailing NUL. NULL/0 queries required size.
+ * Insufficient capacity writes only out_required and returns LK_ERR. Retry with
+ * a larger buffer if an active snapshot grows. Counts settle when final is true.
+ * An operation retains its summary after cancellation and result consumption.
+ */
+lk_status_t lk_response_copy_attempt_summary_json(const lk_response_t *handle,
+                                                  uint8_t *buffer,
+                                                  size_t capacity,
+                                                  size_t *out_required,
+                                                  lk_error_t **out_err);
 
 lk_status_t lk_response_copy_body(const lk_response_t *response,
                                   uint8_t *buf,
@@ -1344,11 +1612,47 @@ lk_status_t lk_session_builder_build(lk_session_builder_t *builder,
                                      lk_session_t **out_session,
                                      lk_error_t **out_err);
 
+/**
+ * Clear this override. Session/request levels still inherit their parent.
+ * Failure leaves the previous configuration intact.
+ */
+lk_status_t lk_session_builder_clear_connect_attempt_limit(lk_session_builder_t *handle,
+                                                           lk_error_t **out_err);
+
+/**
+ * Clear this override. Session/request levels still inherit their parent.
+ * Failure leaves the previous configuration intact.
+ */
+lk_status_t lk_session_builder_clear_extra_http_attempt_limit(lk_session_builder_t *handle,
+                                                              lk_error_t **out_err);
+
 lk_status_t lk_session_builder_disable_redirects(lk_session_builder_t *builder);
 
 void lk_session_builder_free(lk_session_builder_t *builder);
 
+/**
+ * Read requested and effective values without changing configuration.
+ */
+lk_status_t lk_session_builder_get_connect_attempt_limit(const lk_session_builder_t *handle,
+                                                         struct lk_attempt_limit_view_t *out_limit,
+                                                         lk_error_t **out_err);
+
+/**
+ * Read requested and effective values without changing configuration.
+ */
+lk_status_t lk_session_builder_get_extra_http_attempt_limit(const lk_session_builder_t *handle,
+                                                            struct lk_attempt_limit_view_t *out_limit,
+                                                            lk_error_t **out_err);
+
 lk_session_builder_t *lk_session_builder_new(const lk_client_t *client);
+
+/**
+ * Set a finite cap, including zero. A child may not relax its parent.
+ * Failure leaves the previous configuration intact.
+ */
+lk_status_t lk_session_builder_set_connect_attempt_limit(lk_session_builder_t *handle,
+                                                         uint64_t limit,
+                                                         lk_error_t **out_err);
 
 lk_status_t lk_session_builder_set_default_accept_encoding(lk_session_builder_t *builder,
                                                            uint8_t encoding_bits);
@@ -1356,6 +1660,14 @@ lk_status_t lk_session_builder_set_default_accept_encoding(lk_session_builder_t 
 lk_status_t lk_session_builder_set_ech_config(lk_session_builder_t *builder,
                                               const uint8_t *data_ptr,
                                               size_t data_len);
+
+/**
+ * Set a finite cap, including zero. A child may not relax its parent.
+ * Failure leaves the previous configuration intact.
+ */
+lk_status_t lk_session_builder_set_extra_http_attempt_limit(lk_session_builder_t *handle,
+                                                            uint64_t limit,
+                                                            lk_error_t **out_err);
 
 lk_status_t lk_session_builder_set_http1_only(lk_session_builder_t *builder);
 
@@ -1428,6 +1740,13 @@ lk_status_t lk_session_get_all_cookies_json(const lk_session_t *session,
                                             size_t *out_json_len,
                                             lk_error_t **out_err);
 
+/**
+ * Read requested and effective values without changing configuration.
+ */
+lk_status_t lk_session_get_connect_attempt_limit(const lk_session_t *handle,
+                                                 struct lk_attempt_limit_view_t *out_limit,
+                                                 lk_error_t **out_err);
+
 lk_status_t lk_session_get_cookie(const lk_session_t *session,
                                   const char *url_ptr,
                                   size_t url_len,
@@ -1461,6 +1780,13 @@ lk_status_t lk_session_get_cookies_with_attrs_json(const lk_session_t *session,
                                                    const char **out_json_ptr,
                                                    size_t *out_json_len,
                                                    lk_error_t **out_err);
+
+/**
+ * Read requested and effective values without changing configuration.
+ */
+lk_status_t lk_session_get_extra_http_attempt_limit(const lk_session_t *handle,
+                                                    struct lk_attempt_limit_view_t *out_limit,
+                                                    lk_error_t **out_err);
 
 lk_status_t lk_session_new(const lk_client_t *client,
                            lk_session_t **out_session,
@@ -1680,6 +2006,18 @@ lk_status_t lk_stream_read(lk_streaming_response_t *stream,
 lk_status_t lk_stream_read_async(lk_streaming_response_t *stream,
                                  lk_op_t **out_op,
                                  lk_error_t **out_err);
+
+/**
+ * Copy a fresh JSON snapshot without a trailing NUL. NULL/0 queries required size.
+ * Insufficient capacity writes only out_required and returns LK_ERR. Retry with
+ * a larger buffer if an active snapshot grows. Counts settle when final is true.
+ * An operation retains its summary after cancellation and result consumption.
+ */
+lk_status_t lk_streaming_response_copy_attempt_summary_json(const lk_streaming_response_t *handle,
+                                                            uint8_t *buffer,
+                                                            size_t capacity,
+                                                            size_t *out_required,
+                                                            lk_error_t **out_err);
 
 void lk_streaming_response_free(lk_streaming_response_t *stream);
 

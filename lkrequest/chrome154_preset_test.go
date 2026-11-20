@@ -50,8 +50,9 @@ func TestChrome154RetainsChrome153Shape(t *testing.T) {
 }
 
 // presetFingerprintWithoutName decodes a preset's full fingerprint payload,
-// keyed by layer, with the TLS profile name removed — the one field two
-// presets of the same shape are expected to disagree on.
+// keyed by layer, with the TLS profile names removed — the one field two
+// presets of the same shape are expected to disagree on — from the TCP
+// profile and the QUIC one in libraries that report it.
 func presetFingerprintWithoutName(t *testing.T, preset string) map[string]any {
 	t.Helper()
 
@@ -70,8 +71,10 @@ func presetFingerprintWithoutName(t *testing.T, preset string) map[string]any {
 	if err := json.Unmarshal([]byte(raw), &layers); err != nil {
 		t.Fatalf("unmarshal %s fingerprint info error = %v; payload = %s", preset, err, raw)
 	}
-	if tls, ok := layers["tls"].(map[string]any); ok {
-		delete(tls, "name")
+	for _, layer := range tlsLayerNames {
+		if profile, ok := layers[layer].(map[string]any); ok {
+			delete(profile, "name")
+		}
 	}
 	return layers
 }

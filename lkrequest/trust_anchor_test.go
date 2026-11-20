@@ -32,12 +32,12 @@ import (
 // root of their own.
 const customTrustAnchorID = "81fd5901"
 
-// TestChromeSendsItsTrustAnchorIDsInOneSortedOrder pins how chrome_155,
-// chrome_156 and chrome_157 send their trust anchor identifiers: the 28 each
-// lists, in the sorted order Chromium encodes them in, go out in that order on
-// every handshake.
+// TestChromeSendsItsTrustAnchorIDsInOneSortedOrder pins how chrome_155 to
+// chrome_158 send their trust anchor identifiers: the 28 each lists, in the
+// sorted order Chromium encodes them in, go out in that order on every
+// handshake.
 func TestChromeSendsItsTrustAnchorIDsInOneSortedOrder(t *testing.T) {
-	for _, preset := range []string{"chrome_155", "chrome_156", "chrome_157"} {
+	for _, preset := range []string{"chrome_155", "chrome_156", "chrome_157", "chrome_158"} {
 		t.Run(preset, func(t *testing.T) {
 			listed := profileTrustAnchorIDs(t, preset)
 			if len(listed) != 28 || !slices.IsSorted(listed) {
@@ -458,12 +458,17 @@ func rootCertDER(t *testing.T, key *ecdsa.PrivateKey, serial int64) []byte {
 	return der
 }
 
+// tlsLayerNames are the fingerprint layers that hold a TLS profile: the TCP
+// one and the QUIC one. Older libraries do not report "quic_tls", and it is
+// null where QUIC uses the TCP profile.
+var tlsLayerNames = []string{"tls", "quic_tls"}
+
 // trustAnchorSource returns the source of the trust anchor identifiers
-// extension in a decoded fingerprint.
-func trustAnchorSource(t *testing.T, preset string, layers map[string]any) map[string]any {
+// extension in the TLS profile of a decoded fingerprint's layer.
+func trustAnchorSource(t *testing.T, preset string, layers map[string]any, layer string) map[string]any {
 	t.Helper()
-	tlsLayer, _ := layers["tls"].(map[string]any)
-	extensions, _ := tlsLayer["extensions"].([]any)
+	profile, _ := layers[layer].(map[string]any)
+	extensions, _ := profile["extensions"].([]any)
 	for _, raw := range extensions {
 		ext, _ := raw.(map[string]any)
 		if ext["extension_type"] == float64(extTrustAnchorIds) {
@@ -471,7 +476,7 @@ func trustAnchorSource(t *testing.T, preset string, layers map[string]any) map[s
 			return source
 		}
 	}
-	t.Fatalf("%s does not advertise extension 0x%04x", preset, extTrustAnchorIds)
+	t.Fatalf("%s %s profile does not advertise extension 0x%04x", preset, layer, extTrustAnchorIds)
 	return nil
 }
 
@@ -479,7 +484,7 @@ func trustAnchorSource(t *testing.T, preset string, layers map[string]any) map[s
 // profile lists, in the listed order.
 func profileTrustAnchorIDs(t *testing.T, preset string) []string {
 	t.Helper()
-	return jsonStrings(trustAnchorSource(t, preset, presetFingerprintWithoutName(t, preset))["ids"])
+	return jsonStrings(trustAnchorSource(t, preset, presetFingerprintWithoutName(t, preset), "tls")["ids"])
 }
 
 // jsonStrings converts a decoded JSON array of strings.

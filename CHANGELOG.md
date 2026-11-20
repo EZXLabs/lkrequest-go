@@ -2,6 +2,41 @@
 
 All important changes to this project will be documented in this file.
 
+## lkrequest-go 0.3.0
+
+Updates the bundled `lkrequest-ffi` native engine to 0.3.0, adds the Chrome 158 preset, and binds
+what the engine now offers: custom profiles and complete profile bundles, a response read-idle
+timeout and deadlines that can be turned off, control of the TLS session cache, and per-request caps
+on connection starts and resends with a JSON summary of a request's attempts. All of it is new API —
+the native surface grew by 45 symbols and changed none.
+
+Two upstream changes reach code you have already written: a request whose pooled connection closes
+before an answer is no longer sent again, nor does HTTP/2 fall back to HTTP/1.1, unless you enable
+it; and the default total timeout grows from 60 to 120 seconds. See Behaviour Changes. On macOS, cgo
+builds now load the library embedded in the module on any machine, not only on the one that built it.
+
+### 🚀 Features
+
+- **Chrome 158 Preset** — `SetPreset("chrome_158")` / `NewClient("chrome_158")`, captured from Chrome 158.0.8127.37 (Windows, November 2026). Every layer matches Chrome 157, the sorted order of its 28 trust-anchor identifiers included. Header values stay yours to set, so pair it with the `Chrome/158` User-Agent and `sec-ch-ua` that go with it. The default preset remains `chrome_155`.
+- **Custom Profiles and Profile Bundles** — `ExportPresetJSON(name)` writes a built-in preset as a complete profile bundle, a JSON document holding every layer of the preset, HTTP/2 runtime behaviour and protocol policy included, and `ClientBuilder.SetPresetJSON` / `SetPresetFile` load one back, edited or not. `SetTLSProfileJSON`, `SetH2ProfileJSON` and `SetQUICTLSProfileJSON` replace a single layer with a native profile in the form `FingerprintInfoJSON()` reports, taking precedence over the preset or bundle whichever is called first, and `ClearQUICFingerprint` makes QUIC use the TCP TLS profile. Inputs are limited to 1 MiB and validated; a bundle error is an `LkError` whose `DiagnosticsJSON()` carries a `preset_error` with a stable code, the JSON Pointer path and a message. `FingerprintInfoJSON()` now reports the QUIC TLS profile as `quic_tls`.
+- **Read-Idle Timeout and Optional Deadlines** — `ClientBuilder.SetTimeoutReadIdle(ms)` limits how long each read of a response body may wait for data, buffered and streaming alike; it is off by default. `DisableTimeoutDNS`, `DisableTimeoutTCPConnect`, `DisableTimeoutTLSHandshake`, `DisableTimeoutTTFB`, `DisableTimeoutTotal`, `DisableTimeoutQUICConnect` and `DisableTimeoutReadIdle` turn a deadline off — the total one for server-sent events and other long-lived streams, for instance — and calling its setter again turns it back on.
+- **TLS Session Cache Control** — the TLS and QUIC session cache, on by default, can be turned off with `ClientBuilder.SetTLSSessionCacheEnabled(false)`, after which every new connection makes a full handshake, or given a shorter lifetime with `SetTLSSessionCacheTTL(ms)`, `0` caching nothing. `ResetTLSSessionCacheTTL()` restores the default lifetimes: one hour for TLS 1.2, up to seven days for TLS 1.3 and QUIC.
+- **Attempt Limits and Attempt Summaries** — `SetConnectAttemptLimit` caps the TCP and QUIC connections a request may start, and `SetExtraHTTPAttemptLimit` how many times it may be sent again while recovering from a failure. Set on a `ClientBuilder`, `SessionBuilder` or `Request`, a limit applies to each request below it; a session or request may only tighten what it inherits, and `Build()` or `Send()` reports a looser one as `ErrInvalidConfig`. `ConnectAttemptLimit()` and `ExtraHTTPAttemptLimit()` report the limit configured and in force at each level as an `AttemptLimit`, and a request over its connect limit fails with `ErrResourceLimitExceeded`. `Request.EnableAttemptSummary(true)` has the library record the request's attempts, which `AttemptSummaryJSON()` on its `Response`, `StreamingResponse` or `LkError` returns as JSON. None of it enables a retry or sets a deadline.
+
+### 🐞 Fixes
+
+- **cgo Builds on macOS Load the Embedded Library** — the darwin library named itself by the absolute path of the directory it had been built in, so a `-tags lkcgo` binary on macOS looked for the library there and stopped with `Library not loaded` on any other machine. It now names itself `@rpath/liblkrequest_ffi.dylib`, cgo builds add `lib/darwin_arm64` to the rpath, and the library no longer carries local build paths.
+- **HTTP/2 Downloads No Longer Stall** — the native HTTP/2 client replenished its receive window from the peer's send window instead of its own, so Firefox-profile downloads stalled after 128 KiB from servers advertising a larger window; `WINDOW_UPDATE` thresholds are corrected for the other profiles too.
+- **TLS Session Resumption and Compatibility** — TLS 1.2 sessions resume by session ID as well as by ticket, Safari profiles without the `session_ticket` extension included; each ticket attempt gets a fresh session ID; TLS 1.2 sessions last one hour by default without extending their original secret; a zero TLS 1.2 ticket lifetime counts as unspecified; and cached sessions are revoked after a fatal TLS error. The three 3DES suites Safari 26 advertises are implemented, an omitted TLS 1.2 `CertificateStatus` is accepted, P-521 key exchange and signatures are supported, and with verification off, servers signing with an advertised legacy scheme connect again.
+- **Request Recovery** — a cancelled or completed request can no longer be submitted again through a redirect, a protocol recovery or a TCP/QUIC race, and retries keep the request's original total deadline. A streaming request that loses a TCP race no longer submits through the HTTP/2 connection its rival pooled, nor consumes its single-use upload body. HTTP/3 0-RTT and recovery after rejected early data work again whether connection-close retries are on or not.
+- **TLS Alerts and QUIC Diagnostics** — a fatal TLS alert a server sends after the handshake, such as `certificate_required`, now fails an HTTP/1.1 request with `ErrTLS` instead of a bare connection reset, and does not make it replayable. `DiagnosticsJSON()` gains `quic_ms`, the QUIC handshake time, and reports the remote address, cipher and protocol of HTTP/3 requests, those on a pooled connection included.
+- **DNS and QUIC Hardening** — the bundled Hickory resolver moves to 0.26.3, with a bound on DNS question-count allocation (a 12-byte malformed response allocated 5.5 MiB). QUIC fixes for Initial tokens, `MAX_STREAM_DATA` limits and truncated datagrams on Unix are backported, and connection IDs are released when local TLS initialization fails.
+
+### ⚠️ Behaviour Changes
+
+- **Requests Are Not Replayed or Downgraded Unless You Enable It** — a request whose pooled connection closed before an answer used to be sent again on a new connection, and HTTP/2 failures could fall back to HTTP/1.1. Both are now off by default, and such a request fails instead. `ClientBuilder.SetRetryOnConnectionClose(true)` and `SetFallbackH2ToH1(true)` turn them back on; an idempotent method alone does not. Session retry policies are unchanged, and HTTP/3 0-RTT recovery stays on.
+- **The Default Total Timeout Is 120 Seconds** — up from 60. A client that relied on the default to give up after a minute now waits two; `SetTimeoutTotal(60000)` restores the old limit.
+
 ## lkrequest-go 0.2.5
 
 Updates the bundled `lkrequest-ffi` native engine, adds the Chrome 156 and

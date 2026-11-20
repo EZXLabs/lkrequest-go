@@ -366,3 +366,63 @@ var (
 	ffi_lk_client_builder_add_trust_anchor_binding_json func(builder uintptr, jsonPtr uintptr, jsonLen uintptr) int32
 	ffi_lk_trust_anchor_identity_from_der               func(derPtr uintptr, derLen uintptr, outHex uintptr, outHexCapacity uintptr) int32
 )
+
+// Custom TLS / HTTP/2 / QUIC TLS profiles and complete profile bundles.
+var (
+	ffi_lk_client_builder_set_tls_profile_json      func(builder uintptr, jsonPtr uintptr, jsonLen uintptr) int32
+	ffi_lk_client_builder_set_h2_profile_json       func(builder uintptr, jsonPtr uintptr, jsonLen uintptr) int32
+	ffi_lk_client_builder_set_quic_tls_profile_json func(builder uintptr, jsonPtr uintptr, jsonLen uintptr) int32
+	ffi_lk_client_builder_clear_quic_fingerprint    func(builder uintptr) int32
+	ffi_lk_client_builder_set_preset_json           func(builder uintptr, jsonPtr uintptr, jsonLen uintptr, outErr uintptr) int32
+	ffi_lk_client_builder_set_preset_file           func(builder uintptr, pathPtr uintptr, pathLen uintptr, outErr uintptr) int32
+	ffi_lk_preset_export_json                       func(namePtr uintptr, nameLen uintptr, outJSON uintptr, outJSONCapacity uintptr, outJSONLen uintptr, outErr uintptr) int32
+)
+
+// Response read-idle timeout and setters that remove a deadline.
+var (
+	ffi_lk_client_builder_set_timeout_read_idle         func(builder uintptr, timeoutMs uint64) int32
+	ffi_lk_client_builder_disable_timeout_dns           func(builder uintptr) int32
+	ffi_lk_client_builder_disable_timeout_tcp_connect   func(builder uintptr) int32
+	ffi_lk_client_builder_disable_timeout_tls_handshake func(builder uintptr) int32
+	ffi_lk_client_builder_disable_timeout_ttfb          func(builder uintptr) int32
+	ffi_lk_client_builder_disable_timeout_total         func(builder uintptr) int32
+	ffi_lk_client_builder_disable_timeout_quic_connect  func(builder uintptr) int32
+	ffi_lk_client_builder_disable_timeout_read_idle     func(builder uintptr) int32
+)
+
+// TLS / QUIC session cache.
+var (
+	ffi_lk_client_builder_set_tls_session_cache_enabled func(builder uintptr, enabled uintptr) int32
+	ffi_lk_client_builder_set_tls_session_cache_ttl     func(builder uintptr, ttlMs uint64) int32
+	ffi_lk_client_builder_reset_tls_session_cache_ttl   func(builder uintptr) int32
+)
+
+// Attempt limits and attempt summaries.
+var (
+	ffi_lk_client_builder_set_connect_attempt_limit       func(builder uintptr, limit uint64, outErr uintptr) int32
+	ffi_lk_client_builder_clear_connect_attempt_limit     func(builder uintptr, outErr uintptr) int32
+	ffi_lk_client_builder_get_connect_attempt_limit       func(builder uintptr, outLimit uintptr, outErr uintptr) int32
+	ffi_lk_client_builder_set_extra_http_attempt_limit    func(builder uintptr, limit uint64, outErr uintptr) int32
+	ffi_lk_client_builder_clear_extra_http_attempt_limit  func(builder uintptr, outErr uintptr) int32
+	ffi_lk_client_builder_get_extra_http_attempt_limit    func(builder uintptr, outLimit uintptr, outErr uintptr) int32
+	ffi_lk_client_get_connect_attempt_limit               func(client uintptr, outLimit uintptr, outErr uintptr) int32
+	ffi_lk_client_get_extra_http_attempt_limit            func(client uintptr, outLimit uintptr, outErr uintptr) int32
+	ffi_lk_session_builder_set_connect_attempt_limit      func(builder uintptr, limit uint64, outErr uintptr) int32
+	ffi_lk_session_builder_clear_connect_attempt_limit    func(builder uintptr, outErr uintptr) int32
+	ffi_lk_session_builder_get_connect_attempt_limit      func(builder uintptr, outLimit uintptr, outErr uintptr) int32
+	ffi_lk_session_builder_set_extra_http_attempt_limit   func(builder uintptr, limit uint64, outErr uintptr) int32
+	ffi_lk_session_builder_clear_extra_http_attempt_limit func(builder uintptr, outErr uintptr) int32
+	ffi_lk_session_builder_get_extra_http_attempt_limit   func(builder uintptr, outLimit uintptr, outErr uintptr) int32
+	ffi_lk_session_get_connect_attempt_limit              func(session uintptr, outLimit uintptr, outErr uintptr) int32
+	ffi_lk_session_get_extra_http_attempt_limit           func(session uintptr, outLimit uintptr, outErr uintptr) int32
+	ffi_lk_request_set_connect_attempt_limit              func(request uintptr, limit uint64, outErr uintptr) int32
+	ffi_lk_request_clear_connect_attempt_limit            func(request uintptr, outErr uintptr) int32
+	ffi_lk_request_get_connect_attempt_limit              func(request uintptr, outLimit uintptr, outErr uintptr) int32
+	ffi_lk_request_set_extra_http_attempt_limit           func(request uintptr, limit uint64, outErr uintptr) int32
+	ffi_lk_request_clear_extra_http_attempt_limit         func(request uintptr, outErr uintptr) int32
+	ffi_lk_request_get_extra_http_attempt_limit           func(request uintptr, outLimit uintptr, outErr uintptr) int32
+	ffi_lk_request_enable_attempt_summary                 func(request uintptr, enabled uintptr, outErr uintptr) int32
+	ffi_lk_response_copy_attempt_summary_json             func(response uintptr, buffer uintptr, capacity uintptr, outRequired uintptr, outErr uintptr) int32
+	ffi_lk_streaming_response_copy_attempt_summary_json   func(stream uintptr, buffer uintptr, capacity uintptr, outRequired uintptr, outErr uintptr) int32
+	ffi_lk_error_copy_attempt_summary_json                func(err uintptr, buffer uintptr, capacity uintptr, outRequired uintptr, outErr uintptr) int32
+)

@@ -15,19 +15,20 @@ The package wraps the `lkrequest-ffi` C ABI behind a thin, idiomatic Go API:
 
 ## Features
 
-- **Browser fingerprint presets** — Chrome / Firefox / Safari TLS+HTTP2 fingerprints by name
+- **Browser fingerprint presets** — Chrome / Firefox / Safari TLS+HTTP2 fingerprints by name, or loaded from a profile bundle you can export, edit and load back
 - **Fingerprint randomization** — per-connection TLS extension-order jitter (drifts JA3, stays a real browser); synthetic cross-layer identities with the `synthetic-fp` library
 - **HTTP/2 & HTTP/3 (QUIC)** — Alt-Svc discovery, per-request protocol preference, H3 header order, per-request HTTP/2 priority weight
-- **Dual engine** — default `purego` (no C compiler, embedded library) or `lkcgo` (static CGo link)
+- **Dual engine** — default `purego` (no C compiler, embedded library) or `lkcgo` (CGo, linking the bundled shared library)
 - **Streaming responses** — `SendStreaming()` returns an `io.ReadCloser`
 - **Cookie management** — jar, attribute-aware `SetCookieWithAttrs` / `GetCookiesWithAttrs` / `GetAllCookies`, per-request override
 - **Multipart upload** — text + file parts, with Chrome-accurate `----WebKitFormBoundary` boundaries
-- **Retry strategies** — fixed interval / exponential backoff (with jitter)
+- **Retries & attempt limits** — fixed interval / exponential backoff (with jitter), opt-in replay on a closed connection and H2→H1 fallback, caps on connection starts and extra submissions, and a JSON summary of a request's attempts
+- **Timeouts** — per-phase, total and response read-idle timeouts, each of which can be turned off
 - **Proxy** — per-session / per-request / proxy pool / session pool, with rotation, health checks, and bad-proxy marking; static header credentials (`Preshared`, `PrivateToken`, `Bearer`, …) via `ProxyConfig`
 - **MASQUE proxies (experimental)** — QUIC tunneled through an RFC 9298 CONNECT-UDP proxy, with a private CA for the proxy hop; needs a `masque`-enabled library
 - **Connection prewarming** — `Preconnect` / `PreconnectAsync`
 - **Automatic decompression** — gzip / br / deflate / zstd, controllable via `AcceptEncoding`
-- **Certificate management** — custom CA, verify toggle, native certs, ECH, TLS keylog, Trust Anchor Identifiers negotiation
+- **Certificate management** — custom CA, verify toggle, native certs, ECH, TLS keylog, Trust Anchor Identifiers negotiation, TLS session cache control
 - **Header / cookie ordering** — configurable at client / session / request levels; cookies you do not order explicitly follow Chrome's own order; HTTP/1.1 header names in Title-Case or lowercase
 - **Custom DNS** — built-in DoH resolvers (Google / Cloudflare / Quad9) or a custom resolver callback
 - **SOCKS5 UDP relay probing** — detect UDP ASSOCIATE support for QUIC-over-SOCKS5
@@ -148,6 +149,31 @@ client, err := lkrequest.NewClientBuilder().
 	Build()
 ```
 
+### Timeouts, replays and the session cache
+
+Every deadline can be turned off. The total timeout, 120 seconds by default, covers a request from
+connecting to the end of its body, streaming bodies included; `SetTimeoutDNS`,
+`SetTimeoutTCPConnect`, `SetTimeoutTLSHandshake`, `SetTimeoutTTFB` and `SetTimeoutQUICConnect`
+bound its phases, and `SetTimeoutReadIdle` (off by default) how long each read of a body may wait for
+data. Each has a `DisableTimeout…` counterpart, and calling the setter again turns it back on; `0`
+times out at once rather than disabling.
+
+```go
+client, err := lkrequest.NewClientBuilder().
+	DisableTimeoutTotal().     // a long-lived stream…
+	SetTimeoutReadIdle(45000). // …that may not stall for 45 s
+	Build()
+```
+
+A request is not sent again when its pooled connection closes before an answer, and HTTP/2 does not
+fall back to HTTP/1.1, unless the client enables `SetRetryOnConnectionClose(true)` or
+`SetFallbackH2ToH1(true)`. Session retry policies (`SetRetryFixed`, `SetRetryExponential`) are
+configured apart from these.
+
+TLS and QUIC sessions are cached for resumption. `SetTLSSessionCacheEnabled(false)` makes every new
+connection a full handshake, `SetTLSSessionCacheTTL(ms)` limits how long a session may be resumed
+(`0` caches none), and `ResetTLSSessionCacheTTL()` restores the default lifetimes.
+
 ### Session configuration & retry
 
 ```go
@@ -161,6 +187,37 @@ session, err := lkrequest.NewSessionBuilder(client).
 
 // Fixed interval instead: SetRetryFixed(2, 100)  // maxRetries, intervalMs
 ```
+
+### Attempt limits and summaries
+
+Two optional caps bound what a single request may cost. `SetConnectAttemptLimit` caps the TCP and
+QUIC connections it may start: failed starts and the losers of a race count, reusing a pooled
+connection does not, and a request over the cap fails with `ErrResourceLimitExceeded`.
+`SetExtraHTTPAttemptLimit` caps how many times it may be sent again while recovering from a failure;
+the first submission and redirects do not count. Set on a `ClientBuilder` they apply to each request
+of the client, not as a shared quota; a `SessionBuilder` or a `Request` may only tighten what it
+inherits, and a looser value is reported by `Build()` or `Send()`. Neither enables a retry or sets a
+deadline.
+
+```go
+client, err := lkrequest.NewClientBuilder().
+	SetRetryOnConnectionClose(true).
+	SetExtraHTTPAttemptLimit(2).
+	Build()
+// …
+resp, err := session.Get(url).
+	SetConnectAttemptLimit(1).
+	EnableAttemptSummary(true).
+	Send()
+fmt.Println(resp.AttemptSummaryJSON())
+// {"connect_initiations":1,"http_submissions":1,"extra_http_submissions":0,"outcome":"succeeded",…}
+```
+
+`ConnectAttemptLimit()` and `ExtraHTTPAttemptLimit()`, on the builders, `Client`, `Session` and
+`Request`, report an `AttemptLimit`: the value set at that level, the one in force and the `Scope` it
+comes from. `AttemptSummaryJSON()` on a `Response`, `StreamingResponse` or `LkError` returns the
+summary `EnableAttemptSummary(true)` asked for — submissions, connection starts, recoveries, the
+limits in force and, after a failure, the `denial_reason` — and `""` for a request without one.
 
 ### Cookies
 
@@ -303,6 +360,35 @@ resp, err := session.Get("https://example.com/").
 	Send()
 ```
 
+### Custom profiles and profile bundles
+
+A fingerprint can come from data instead of a preset name. `ExportPresetJSON` writes a built-in
+preset as a complete profile bundle: a JSON document (`"format": "lkrequest-profile-bundle"`,
+`"schema_version": 2`) holding every layer a preset does, HTTP/2 runtime behaviour and protocol
+policy included, which `SetPresetJSON` or `SetPresetFile` loads back, edited or not.
+
+```go
+bundle, err := lkrequest.ExportPresetJSON("chrome_157") // edit, store, ship
+client, err := lkrequest.NewClientBuilder().
+	SetPresetJSON(bundle). // or SetPresetFile("chrome-157.json")
+	Build()
+```
+
+Single layers can be replaced on top of a preset or a bundle with native profile JSON, in the form
+`FingerprintInfoJSON()` reports for the layer: `SetTLSProfileJSON`, `SetH2ProfileJSON` (data fields
+only, so the preset's HTTP/2 runtime behaviour gives way to the baseline), `SetQUICTLSProfileJSON`,
+and `ClearQUICFingerprint` to make QUIC use the TCP TLS profile. They take precedence over the preset
+or bundle whichever is called first, and an empty string hands the layer back.
+
+- Inputs are limited to 1 MiB and validated, and `Build()` reports what the library rejects. A bundle
+  error is an `LkError` (`ErrInvalidConfig`, `ErrResourceLimitExceeded` or `ErrIO`) whose
+  `DiagnosticsJSON()` carries a `preset_error`: a stable `code`, the JSON Pointer `path` and a `message`.
+- `SetPreset` after `SetPresetJSON` replaces the bundle, and `SetPresetJSON("")` removes it. A bundle
+  cannot change proxy, CA or verification settings, and loading reads nothing but the file you name.
+- `FingerprintInfoJSON()` reports the QUIC TLS profile as `quic_tls`, `null` when QUIC uses the TCP one.
+- Loading a bundle reproduces its fields; that alone does not make a fingerprint match a browser on
+  the wire.
+
 ### Trust Anchor Identifiers
 
 Chrome presets advertise trust anchor identifiers, IDs of the roots the client accepts, in the
@@ -393,12 +479,17 @@ Two interchangeable binding engines fill the same `ffi_lk_*` function pointers:
 | Engine | Build tag | How it loads the library | Needs a C compiler |
 |---|---|---|---|
 | `purego` (default) | `!lkcgo` | extracts the embedded shared library to a temp dir and `dlopen`s it | No |
-| `cgo` | `lkcgo` | `#include "lkrequest.h"` and links `lib/<platform>/` statically | Yes |
+| `cgo` | `lkcgo` | `#include "lkrequest.h"` and links the shared library in `lib/<platform>/` | Yes |
 
 ```bash
 go build ./lkrequest/...              # purego (default)
 go build -tags lkcgo ./lkrequest/...  # cgo
 ```
+
+A cgo binary loads that library when it starts. On darwin it finds it through an rpath to
+`lib/darwin_arm64` of the module it was built from; on linux, put `lib/linux_amd64` on
+`LD_LIBRARY_PATH` (or install the library); on windows, place `lkrequest_ffi.dll` next to the
+executable or on `PATH`.
 
 ## Platform Support
 
@@ -416,13 +507,13 @@ go build -tags lkcgo ./lkrequest/...  # cgo
 
 | Group | Symbols |
 |---|---|
-| Top-level helpers | `Get`, `PostJSON`, `NewClient`, `NewDefaultClient`, `NewSession`, `NewRequest`, `NewMultipart`, `ParseProxyConfig`, `NewMasqueConfig`, `TrustAnchorIdentity` |
+| Top-level helpers | `Get`, `PostJSON`, `NewClient`, `NewDefaultClient`, `NewSession`, `NewRequest`, `NewMultipart`, `ParseProxyConfig`, `NewMasqueConfig`, `TrustAnchorIdentity`, `ExportPresetJSON` |
 | HTTP verbs | `Session.Get` / `Post` / `Put` / `Delete` / `Head` / `Patch` / `Options` / `Request` — same set on `SessionPoolGuard` |
 | Builders | `NewClientBuilder`, `NewSessionBuilder`, `NewProxyPoolBuilder`, `NewSessionPoolBuilder` |
-| Core types | `Client`, `Session`, `Request`, `Response`, `StreamingResponse`, `ProxyPool`, `SessionPool`, `ProxyConfig`, `MasqueConfig`, `Multipart`, `Cookie`, `CookieInfo`, `Redirect`, `TrustAnchorPolicy` |
+| Core types | `Client`, `Session`, `Request`, `Response`, `StreamingResponse`, `ProxyPool`, `SessionPool`, `ProxyConfig`, `MasqueConfig`, `Multipart`, `Cookie`, `CookieInfo`, `Redirect`, `TrustAnchorPolicy`, `AttemptLimit` |
 | Introspection | `ABIVersion`, `LibraryVersion`, `FeatureSupported`, `ListPresetsJSON`, `GetPresetDetailJSON` |
 | Logging | `InitLog`, `InitLogCallback` |
-| Enums | `RandomizeMode`, `FingerprintLayers`, `AcceptEncoding`, `RotationStrategy`, `HttpVersion`, `PreferredHTTPVersion`, `DnsConfig`, `LogLevel`, `ProxyAuthHeader`, `TrustAnchorAdvertisement`, `TrustAnchorRecovery` |
+| Enums | `RandomizeMode`, `FingerprintLayers`, `AcceptEncoding`, `RotationStrategy`, `HttpVersion`, `PreferredHTTPVersion`, `DnsConfig`, `LogLevel`, `ProxyAuthHeader`, `TrustAnchorAdvertisement`, `TrustAnchorRecovery`, `AttemptLimitScope` |
 
 Full API docs: `go doc github.com/EZXLabs/lkrequest-go/lkrequest`.
 
@@ -431,4 +522,5 @@ Full API docs: `go doc github.com/EZXLabs/lkrequest-go/lkrequest`.
 - `Client` and `Session` are safe to share across goroutines; `Request` is consume-on-send (reuse via `Clone()`).
 - `StreamingResponse` implements `io.ReadCloser`.
 - A `ClientBuilder` built without `SetPreset`, like `NewDefaultClient()`, uses the library's default preset — currently `chrome_155` — header order included. Call `SetPreset` for another fingerprint, or `AddHeaderOrder` / `AddCookieOrder` to pin a specific order.
-- QUIC/H3, custom DNS resolver, SOCKS5 UDP probe, preferred/negotiated HTTP version, `ProxyConfig` / `MasqueConfig`, cookie attribute readers, the per-request H2 priority weight, HTTP/1.1 header casing, Trust Anchor Identifiers, and synthetic `SetRandomize` tiers require a library that exports the corresponding symbols. Against an older embedded library these return an `lk: ... not supported by the loaded lkrequest library` error (builders defer it to `Build()`); the package still loads normally.
+- QUIC/H3, custom DNS resolver, SOCKS5 UDP probe, preferred/negotiated HTTP version, `ProxyConfig` / `MasqueConfig`, cookie attribute readers, the per-request H2 priority weight, HTTP/1.1 header casing, Trust Anchor Identifiers, custom profiles and profile bundles, the read-idle timeout and the `DisableTimeout…` setters, TLS session cache settings, attempt limits and summaries, and synthetic `SetRandomize` tiers require a library that exports the corresponding symbols. Against an older embedded library these return an `lk: ... not supported by the loaded lkrequest library` error (builders defer it to `Build()`); the package still loads normally.
+- `FeatureSupported(name)` tells whether the loaded library has a feature, by names such as `preset-bundle-v2`, `read-idle-timeout`, `optional-total-timeout`, `optional-phase-timeouts`, `tls-session-cache`, `connect-attempt-limit`, `extra-http-attempt-limit` and `attempt-summary`.
